@@ -1,0 +1,1763 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:," />
+  <title>宁波钟鼓楼粒子扩散交互图</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 44%, #10213a 0%, #050c18 46%, #010208 100%);
+      font-family: Georgia, "Times New Roman", "Noto Serif SC", serif;
+    }
+
+    #stage {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 50% 45%, rgba(255,255,255,0.035), transparent 26%),
+        radial-gradient(circle at 50% 50%, transparent 44%, rgba(0,0,0,0.62) 100%);
+    }
+
+    .label-layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      font-variant-numeric: lining-nums;
+    }
+
+    .annotation-label {
+      position: absolute;
+      min-width: 164px;
+      max-width: 238px;
+      padding: 7px 9px 8px;
+      border-left: 1px solid rgba(185, 232, 255, 0.48);
+      background:
+        radial-gradient(circle, rgba(151, 224, 255, 0.28) 0 0.8px, transparent 1.45px) 0 0 / 8px 8px,
+        linear-gradient(90deg, rgba(56, 184, 232, 0.16), rgba(6, 18, 31, 0.02) 72%, transparent);
+      color: rgba(235, 249, 255, 0.94);
+      text-shadow: 0 0 12px rgba(170, 230, 255, 0.38);
+      letter-spacing: 0;
+      transform: translate3d(0, 0, 0);
+      will-change: opacity, transform;
+      box-shadow: inset 0 1px rgba(178, 234, 255, 0.16), inset 0 -1px rgba(178, 234, 255, 0.08);
+    }
+
+    .annotation-label.left {
+      border-left: none;
+      border-right: 1px solid rgba(185, 232, 255, 0.48);
+      text-align: right;
+      background:
+        radial-gradient(circle, rgba(151, 224, 255, 0.28) 0 0.8px, transparent 1.45px) 0 0 / 8px 8px,
+        linear-gradient(270deg, rgba(56, 184, 232, 0.16), rgba(6, 18, 31, 0.02) 72%, transparent);
+    }
+
+    .annotation-label .cn {
+      display: block;
+      font-size: 14px;
+      line-height: 1.1;
+      color: rgba(255, 247, 218, 0.96);
+    }
+
+    .annotation-label .en {
+      display: block;
+      margin-top: 3px;
+      font-size: 11px;
+      line-height: 1.1;
+      color: rgba(156, 214, 238, 0.82);
+      font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    .annotation-line {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .annotation-line line {
+      stroke: rgba(153, 217, 242, 0.5);
+      stroke-width: 1;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .annotation-line circle {
+      fill: rgba(226, 244, 255, 0.78);
+    }
+
+    @media (max-width: 680px) {
+      .annotation-label {
+        min-width: 108px;
+        max-width: 128px;
+        padding: 5px 6px 6px;
+      }
+
+      .annotation-label .cn {
+        font-size: 11px;
+      }
+
+      .annotation-label .en {
+        font-size: 9px;
+      }
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <div class="vignette"></div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
+
+    const TAU = Math.PI * 2;
+    const DPR_LIMIT = 2;
+    const MIN_Y = -0.85;
+    const MAX_Y = 9.6;
+    const TARGET_PARTICLES = 148000;
+
+    const MODULES = [
+      { id: 0, cn: '环境微粒', en: 'Atmospheric Particles', yOffset: 0.0, delay: 0.00, xOffset: 0.00, zOffset: 0.00 },
+      { id: 1, cn: '砖石城台', en: 'Brick City-Gate Platform', yOffset: -0.12, delay: 0.00, xOffset: -0.56, zOffset: -0.18 },
+      { id: 2, cn: '拱形门洞', en: 'Arched Gateway', yOffset: 0.18, delay: 0.018, xOffset: -1.08, zOffset: 0.42 },
+      { id: 3, cn: '登楼台阶', en: 'Northeast Stair / Access', yOffset: 0.28, delay: 0.034, xOffset: -1.72, zOffset: 0.78 },
+      { id: 4, cn: '木构楼身', en: 'Five-Bay Timber Pavilion', yOffset: 0.58, delay: 0.050, xOffset: 0.82, zOffset: 0.56 },
+      { id: 5, cn: '三重檐歇山顶', en: 'Triple Hip-and-Gable Roofs', yOffset: 0.88, delay: 0.064, xOffset: 1.22, zOffset: 0.88 },
+      { id: 6, cn: '斗栱与檐下构件', en: 'Bracket Sets & Eaves', yOffset: 0.52, delay: 0.078, xOffset: 1.55, zOffset: 1.02 },
+      { id: 7, cn: '顶部钟楼', en: 'Republican-Era Clock Turret', yOffset: 1.02, delay: 0.092, xOffset: 0.96, zOffset: 0.62 },
+      { id: 8, cn: '匾额与报时', en: 'Plaques / Timekeeping', yOffset: 0.22, delay: 0.106, xOffset: -1.48, zOffset: 0.95 },
+      { id: 9, cn: '内部鼓钟与传动', en: 'Bell / Drum / Drive Train', yOffset: 0.06, delay: 0.118, xOffset: 2.18, zOffset: 1.36 },
+      { id: 10, cn: '鼓楼步行街语境', en: 'Gulou Street Context', yOffset: -0.22, delay: 0.026, xOffset: -0.62, zOffset: -0.50 }
+    ];
+
+    const CORE_PULL = {
+      2: [2.15, 0.05, 1.24],
+      3: [-1.00, 0.10, 1.10],
+      4: [1.45, 0.08, 1.02],
+      5: [1.72, 0.18, 1.22],
+      6: [1.95, 0.08, 1.36],
+      7: [0.98, 0.18, 0.78],
+      8: [-0.86, 0.04, 1.16],
+      9: [1.92, 0.02, 1.42]
+    };
+
+    const canvas = document.getElementById('stage');
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      alpha: true,
+      powerPreference: 'high-performance'
+    });
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.54;
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x020814, 0.02);
+
+    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 92);
+    camera.position.set(2.15, 5.15, 18.8);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0.0, 4.05, 0.18);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.055;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.34;
+    controls.minDistance = 9.5;
+    controls.maxDistance = 34;
+    controls.minPolarAngle = Math.PI * 0.18;
+    controls.maxPolarAngle = Math.PI * 0.67;
+
+    const labelRenderer = new CSS2DRenderer();
+    labelRenderer.domElement.className = 'label-layer';
+    labelRenderer.domElement.style.position = 'fixed';
+    labelRenderer.domElement.style.inset = '0';
+    labelRenderer.domElement.style.pointerEvents = 'none';
+    document.body.appendChild(labelRenderer.domElement);
+
+    const leaderSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    leaderSvg.classList.add('annotation-line');
+    labelRenderer.domElement.appendChild(leaderSvg);
+
+    const renderPass = new RenderPass(scene, camera);
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.24, 0.34, 0.28);
+    const composer = new EffectComposer(renderer);
+    composer.addPass(renderPass);
+    composer.addPass(bloomPass);
+
+    function mulberry32(seed) {
+      return function rand() {
+        let t = seed += 0x6D2B79F5;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    const rand = mulberry32(0x0E0A1410);
+
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    function clamp01(t) {
+      return Math.max(0, Math.min(1, t));
+    }
+
+    function smooth01(t) {
+      t = clamp01(t);
+      return t * t * (3 - 2 * t);
+    }
+
+    function jitter(amount) {
+      return (rand() - 0.5) * amount;
+    }
+
+    function moduleMeta(moduleId) {
+      return MODULES[moduleId] || MODULES[0];
+    }
+
+    const home = [];
+    const exploded = [];
+    const moduleIds = [];
+    const coreFlags = [];
+    const delays = [];
+    const seeds = [];
+    const sizes = [];
+
+    function explodedFor(x, y, z, moduleId, coreFlag, seed) {
+      const meta = moduleMeta(moduleId);
+      let ex = x + meta.xOffset;
+      let ey = y + meta.yOffset;
+      let ez = z + meta.zOffset;
+
+      if (moduleId > 0) {
+        const phase = seed * TAU;
+        ex += Math.sin(phase) * 0.018;
+        ey += Math.cos(phase * 0.6) * 0.012;
+        ez += Math.cos(phase * 0.7) * 0.018;
+      }
+
+      if (coreFlag > 0.5) {
+        const pull = CORE_PULL[moduleId] || [2.6, 0.1, 1.2];
+        ex += pull[0];
+        ey += pull[1];
+        ez += pull[2];
+      }
+
+      if (moduleId === 0) {
+        ex = x + Math.sin(seed * TAU) * 0.42;
+        ey = y + Math.cos(seed * 9.0) * 0.12;
+        ez = z + Math.cos(seed * TAU) * 0.42;
+      }
+
+      return [ex, ey, ez];
+    }
+
+    function addParticle(x, y, z, moduleId, coreFlag = 0, size = 1.85, seed = rand()) {
+      const e = explodedFor(x, y, z, moduleId, coreFlag, seed);
+      home.push(x, y, z);
+      exploded.push(e[0], e[1], e[2]);
+      moduleIds.push(moduleId);
+      coreFlags.push(coreFlag);
+      delays.push(moduleMeta(moduleId).delay + (coreFlag > 0.5 ? 0.018 : 0));
+      seeds.push(seed);
+      sizes.push(size);
+    }
+
+    function sampleLine(a, b, count, moduleId, coreFlag = 0, size = 1.9, noise = 0.012) {
+      for (let i = 0; i < count; i++) {
+        const t = rand();
+        addParticle(
+          lerp(a[0], b[0], t) + jitter(noise),
+          lerp(a[1], b[1], t) + jitter(noise),
+          lerp(a[2], b[2], t) + jitter(noise),
+          moduleId,
+          coreFlag,
+          size
+        );
+      }
+    }
+
+    function samplePlane(count, x0, x1, y0, y1, z, moduleId, coreFlag = 0, options = {}) {
+      const skip = options.skip;
+      const size = options.size || 1.72;
+      let made = 0;
+      let guard = 0;
+      while (made < count && guard < count * 20) {
+        guard++;
+        const x = lerp(x0, x1, rand());
+        const y = lerp(y0, y1, rand());
+        if (!skip || !skip(x, y)) {
+          addParticle(x + jitter(0.012), y + jitter(0.012), z + jitter(0.012), moduleId, coreFlag, size);
+          made++;
+        }
+      }
+    }
+
+    function sampleBoxSurface(count, hx, hy, hz, cx, cy, cz, moduleId, coreFlag = 0, options = {}) {
+      const size = options.size || 1.75;
+      const includeBack = options.includeBack !== false;
+      const areas = [
+        hx * 2 * hy * 2,
+        hx * 2 * hy * 2,
+        hz * 2 * hy * 2,
+        hz * 2 * hy * 2,
+        hx * 2 * hz * 2,
+        hx * 2 * hz * 2
+      ];
+      if (!includeBack) areas[1] = 0;
+      const total = areas.reduce((a, b) => a + b, 0);
+      for (let i = 0; i < count; i++) {
+        let pick = rand() * total;
+        let face = 0;
+        for (let f = 0; f < areas.length; f++) {
+          if (pick <= areas[f]) {
+            face = f;
+            break;
+          }
+          pick -= areas[f];
+        }
+        let x = 0;
+        let y = 0;
+        let z = 0;
+        if (face === 0) {
+          x = lerp(-hx, hx, rand());
+          y = lerp(-hy, hy, rand());
+          z = hz;
+        } else if (face === 1) {
+          x = lerp(-hx, hx, rand());
+          y = lerp(-hy, hy, rand());
+          z = -hz;
+        } else if (face === 2) {
+          x = hx;
+          y = lerp(-hy, hy, rand());
+          z = lerp(-hz, hz, rand());
+        } else if (face === 3) {
+          x = -hx;
+          y = lerp(-hy, hy, rand());
+          z = lerp(-hz, hz, rand());
+        } else if (face === 4) {
+          x = lerp(-hx, hx, rand());
+          y = hy;
+          z = lerp(-hz, hz, rand());
+        } else {
+          x = lerp(-hx, hx, rand());
+          y = -hy;
+          z = lerp(-hz, hz, rand());
+        }
+        addParticle(cx + x + jitter(0.01), cy + y + jitter(0.01), cz + z + jitter(0.01), moduleId, coreFlag, size);
+      }
+    }
+
+    function sampleRingXY(cx, cy, cz, radius, count, moduleId, coreFlag = 0, size = 2.0, thickness = 0.02) {
+      for (let i = 0; i < count; i++) {
+        const a = rand() * TAU;
+        const r = radius + jitter(thickness);
+        addParticle(cx + Math.cos(a) * r, cy + Math.sin(a) * r, cz + jitter(0.012), moduleId, coreFlag, size);
+      }
+    }
+
+    function sampleDiskXY(cx, cy, cz, radius, count, moduleId, coreFlag = 0, size = 1.85) {
+      for (let i = 0; i < count; i++) {
+        const a = rand() * TAU;
+        const r = Math.sqrt(rand()) * radius;
+        addParticle(cx + Math.cos(a) * r, cy + Math.sin(a) * r, cz + jitter(0.012), moduleId, coreFlag, size);
+      }
+    }
+
+    function sampleEllipseRing(cx, cy, cz, rx, ry, count, moduleId, coreFlag = 0, size = 2.0, thickness = 0.018, angle = 0) {
+      const ca = Math.cos(angle);
+      const sa = Math.sin(angle);
+      for (let i = 0; i < count; i++) {
+        const a = rand() * TAU;
+        const tx = Math.cos(a) * (rx + jitter(thickness));
+        const ty = Math.sin(a) * (ry + jitter(thickness));
+        const x = cx + tx * ca - ty * sa;
+        const y = cy + tx * sa + ty * ca;
+        addParticle(x, y, cz + jitter(0.012), moduleId, coreFlag, size);
+      }
+    }
+
+    function sampleArc(cx, cy, cz, r, a0, a1, count, moduleId, coreFlag = 0, size = 1.9, noise = 0.01) {
+      for (let i = 0; i < count; i++) {
+        const a = lerp(a0, a1, rand());
+        addParticle(cx + Math.cos(a) * r + jitter(noise), cy + Math.sin(a) * r + jitter(noise), cz + jitter(noise), moduleId, coreFlag, size);
+      }
+    }
+
+    function sampleArch(cx, y0, w, h, z, moduleId, coreFlag = 0, size = 1.9) {
+      const shoulder = y0 + h * 0.56;
+      const top = y0 + h;
+      sampleLine([cx - w * 0.5, y0, z], [cx - w * 0.5, shoulder, z], 180, moduleId, coreFlag, size);
+      sampleLine([cx + w * 0.5, y0, z], [cx + w * 0.5, shoulder, z], 180, moduleId, coreFlag, size);
+      for (let i = 0; i < 360; i++) {
+        const a = lerp(Math.PI, 0, rand());
+        addParticle(cx + Math.cos(a) * w * 0.5 + jitter(0.009), shoulder + Math.sin(a) * (top - shoulder) + jitter(0.009), z + jitter(0.009), moduleId, coreFlag, size);
+      }
+    }
+
+    function sampleGear(cx, cy, cz, radius, teeth, moduleId, coreFlag = 1, size = 2.06) {
+      for (let i = 0; i < 980; i++) {
+        const a = rand() * TAU;
+        const tooth = Math.floor(a / TAU * teeth * 2) % 2;
+        const r = radius * (tooth ? 1.10 : 0.93) + jitter(0.018);
+        addParticle(cx + Math.cos(a) * r, cy + Math.sin(a) * r, cz + jitter(0.012), moduleId, coreFlag, size);
+      }
+      sampleRingXY(cx, cy, cz, radius * 0.38, 180, moduleId, coreFlag, size * 0.95, 0.012);
+      for (let i = 0; i < 8; i++) {
+        const a = i * TAU / 8;
+        sampleLine([cx, cy, cz], [cx + Math.cos(a) * radius * 0.82, cy + Math.sin(a) * radius * 0.82, cz], 58, moduleId, coreFlag, size * 0.86, 0.006);
+      }
+    }
+
+    function addFacade() {
+      const holes = [
+        { x: 0, y: 5.25, r: 1.72 },
+        { x: 0, y: 2.15, r: 1.18 },
+        { x: -0.82, y: 8.05, w: 0.86, h: 0.92 },
+        { x: 0.82, y: 8.05, w: 0.86, h: 0.92 }
+      ];
+      samplePlane(14800, -3.35, 3.35, -0.15, 10.55, -0.22, 1, 0, {
+        size: 1.7,
+        skip: (x, y) => holes.some((h) => h.r ? (x - h.x) * (x - h.x) + (y - h.y) * (y - h.y) < h.r * h.r : Math.abs(x - h.x) < h.w * 0.5 && Math.abs(y - h.y) < h.h * 0.5)
+      });
+      for (const x of [-3.38, 3.38]) sampleLine([x, -0.2, -0.18], [x, 10.6, -0.18], 420, 1, 0, 1.78);
+      for (const y of [0.02, 1.25, 3.55, 6.92, 9.55, 10.58]) sampleLine([-3.42, y, -0.16], [3.42, y, -0.16], 380, 1, 0, 1.78);
+      for (let i = 0; i < 3600; i++) {
+        const x = lerp(-3.18, 3.18, rand());
+        const y = lerp(0.05, 10.3, rand());
+        if (Math.abs((x * 1.7 + y * 0.8) % 0.52) < 0.018) addParticle(x, y, -0.09, 1, 0, 1.55);
+      }
+    }
+
+    function addGothicFrame() {
+      sampleRingXY(0, 5.25, 0.05, 1.76, 1150, 2, 0, 2.2, 0.026);
+      sampleRingXY(0, 5.25, 0.07, 1.48, 850, 2, 0, 2.08, 0.02);
+      sampleArch(-0.82, 7.46, 0.78, 1.42, 0.06, 2, 0, 2.08);
+      sampleArch(0.82, 7.46, 0.78, 1.42, 0.06, 2, 0, 2.08);
+      for (const x of [-1.55, 1.55, -2.35, 2.35]) {
+        sampleLine([x, 3.55, 0.06], [x, 9.18, 0.06], 460, 2, 0, 1.98);
+      }
+      for (const x of [-1.62, 1.62]) {
+        sampleLine([x, 7.05, 0.08], [x * 0.54, 9.85, 0.08], 320, 2, 0, 2.12);
+        sampleLine([x * 0.54, 9.85, 0.08], [0, 10.36, 0.08], 240, 2, 0, 2.12);
+      }
+      for (const x of [-2.42, -1.75, 1.75, 2.42]) {
+        sampleBoxSurface(330, 0.08, 0.52, 0.06, x, 8.42, 0.06, 2, 0, { size: 1.96 });
+        sampleArc(x, 9.05, 0.06, 0.28, Math.PI, 0, 120, 2, 0, 1.96);
+      }
+      for (let i = 0; i < 16; i++) {
+        const x = -2.8 + i * (5.6 / 15);
+        sampleLine([x, 3.3, 0.08], [x + jitter(0.12), 3.62, 0.08], 52, 2, 0, 1.78);
+        sampleLine([x, 6.95, 0.08], [x + jitter(0.12), 7.25, 0.08], 52, 2, 0, 1.78);
+      }
+    }
+
+    function addApostleWindows() {
+      for (const cx of [-0.82, 0.82]) {
+        sampleBoxSurface(780, 0.36, 0.46, 0.05, cx, 8.06, 0.12, 3, 0, { size: 1.96, includeBack: false });
+        sampleArch(cx, 7.52, 0.52, 0.82, 0.2, 3, 0, 2.08);
+        for (let j = 0; j < 3; j++) {
+          const x = cx - 0.18 + j * 0.18;
+          sampleLine([x, 7.65, 0.24], [x, 8.45, 0.24], 100, 3, 1, 2.02);
+          sampleRingXY(x, 8.56, 0.24, 0.07, 80, 3, 1, 2.08, 0.012);
+          sampleLine([x - 0.09, 8.18, 0.24], [x + 0.09, 8.18, 0.24], 52, 3, 1, 1.9);
+        }
+      }
+      sampleLine([-1.55, 8.88, 0.18], [1.55, 8.88, 0.18], 360, 3, 0, 1.86);
+    }
+
+    function addAstronomicalDial() {
+      sampleDiskXY(0, 5.25, 0.13, 1.33, 6200, 4, 0, 1.92);
+      sampleRingXY(0, 5.25, 0.18, 1.62, 1150, 4, 0, 2.2, 0.035);
+      sampleRingXY(0, 5.25, 0.2, 1.18, 760, 4, 0, 2.0, 0.022);
+      sampleRingXY(0, 5.25, 0.22, 0.54, 420, 4, 0, 1.9, 0.02);
+      for (let i = 0; i < 24; i++) {
+        const a = -Math.PI / 2 + i * TAU / 24;
+        sampleLine([Math.cos(a) * 1.42, 5.25 + Math.sin(a) * 1.42, 0.24], [Math.cos(a) * 1.58, 5.25 + Math.sin(a) * 1.58, 0.24], 46, 4, 0, 2.02, 0.006);
+      }
+      for (let i = 0; i < 12; i++) {
+        const a = -Math.PI / 2 + i * TAU / 12;
+        sampleLine([Math.cos(a) * 0.18, 5.25 + Math.sin(a) * 0.18, 0.25], [Math.cos(a) * 1.25, 5.25 + Math.sin(a) * 1.25, 0.25], 90, 4, 0, 1.72, 0.006);
+      }
+      sampleArc(0, 5.25, 0.26, 1.02, Math.PI * 1.05, Math.PI * 1.88, 700, 4, 0, 2.05, 0.014);
+      sampleArc(0, 5.25, 0.27, 0.82, Math.PI * 0.18, Math.PI * 0.96, 520, 4, 0, 1.95, 0.014);
+    }
+
+    function addZodiacRing() {
+      const angle = -0.34;
+      sampleEllipseRing(0.02, 5.27, 0.36, 1.08, 0.52, 1800, 5, 1, 2.16, 0.03, angle);
+      sampleEllipseRing(0.02, 5.27, 0.38, 1.28, 0.64, 1250, 5, 0, 2.05, 0.018, angle);
+      for (let i = 0; i < 12; i++) {
+        const a = i * TAU / 12;
+        const ca = Math.cos(angle);
+        const sa = Math.sin(angle);
+        const x = Math.cos(a) * 1.18;
+        const y = Math.sin(a) * 0.58;
+        const px = 0.02 + x * ca - y * sa;
+        const py = 5.27 + x * sa + y * ca;
+        sampleRingXY(px, py, 0.44, 0.07, 120, 5, 1, 2.18, 0.012);
+        sampleLine([px - 0.08, py, 0.44], [px + 0.08, py, 0.44], 34, 5, 1, 2.0);
+        sampleLine([px, py - 0.08, 0.44], [px, py + 0.08, 0.44], 34, 5, 1, 2.0);
+      }
+    }
+
+    function addSunMoonIndicators() {
+      const sunA = -0.72;
+      const moonA = 1.85;
+      sampleLine([0, 5.25, 0.52], [Math.cos(sunA) * 1.34, 5.25 + Math.sin(sunA) * 1.34, 0.52], 340, 6, 1, 2.08, 0.006);
+      sampleLine([0, 5.25, 0.5], [Math.cos(moonA) * 1.14, 5.25 + Math.sin(moonA) * 1.14, 0.5], 260, 6, 1, 1.96, 0.006);
+      sampleDiskXY(Math.cos(sunA) * 1.34, 5.25 + Math.sin(sunA) * 1.34, 0.58, 0.16, 520, 6, 1, 2.35);
+      sampleRingXY(Math.cos(sunA) * 1.34, 5.25 + Math.sin(sunA) * 1.34, 0.6, 0.2, 240, 6, 1, 2.2, 0.014);
+      sampleDiskXY(Math.cos(moonA) * 1.14, 5.25 + Math.sin(moonA) * 1.14, 0.56, 0.13, 360, 6, 1, 2.18);
+      sampleArc(Math.cos(moonA) * 1.14, 5.25 + Math.sin(moonA) * 1.14, 0.62, 0.18, -Math.PI * 0.58, Math.PI * 0.58, 190, 6, 1, 2.14);
+      sampleRingXY(0, 5.25, 0.56, 0.18, 220, 6, 1, 2.08, 0.014);
+    }
+
+    function addCalendarPlate() {
+      sampleDiskXY(0, 2.15, 0.14, 0.98, 4200, 7, 0, 1.9);
+      sampleRingXY(0, 2.15, 0.2, 1.16, 900, 7, 0, 2.15, 0.03);
+      sampleRingXY(0, 2.15, 0.24, 0.74, 520, 7, 0, 1.98, 0.02);
+      sampleDiskXY(0, 2.15, 0.3, 0.32, 640, 7, 1, 2.1);
+      for (let i = 0; i < 12; i++) {
+        const a = -Math.PI / 2 + i * TAU / 12;
+        sampleLine([Math.cos(a) * 0.82, 2.15 + Math.sin(a) * 0.82, 0.28], [Math.cos(a) * 1.1, 2.15 + Math.sin(a) * 1.1, 0.28], 76, 7, 0, 1.92, 0.006);
+        sampleRingXY(Math.cos(a) * 0.55, 2.15 + Math.sin(a) * 0.55, 0.34, 0.055, 52, 7, 1, 1.96, 0.008);
+      }
+    }
+
+    function addMovingFigures() {
+      const figures = [
+        [-2.32, 6.62, 'death'],
+        [2.32, 6.62, 'turk'],
+        [-2.24, 4.05, 'vanity'],
+        [2.24, 4.05, 'miser']
+      ];
+      for (const [x, y, type] of figures) {
+        sampleRingXY(x, y + 0.54, 0.26, 0.14, 160, 8, 1, 2.05, 0.012);
+        sampleLine([x, y + 0.38, 0.24], [x, y - 0.34, 0.24], 170, 8, 1, 2.0, 0.008);
+        sampleLine([x - 0.28, y + 0.22, 0.24], [x + 0.28, y + 0.22, 0.24], 120, 8, 1, 1.98, 0.008);
+        sampleLine([x, y - 0.34, 0.24], [x - 0.2, y - 0.72, 0.24], 90, 8, 1, 1.92, 0.008);
+        sampleLine([x, y - 0.34, 0.24], [x + 0.2, y - 0.72, 0.24], 90, 8, 1, 1.92, 0.008);
+        if (type === 'death') {
+          sampleLine([x + 0.34, y + 0.58, 0.28], [x + 0.48, y - 0.72, 0.28], 130, 8, 1, 2.02, 0.006);
+          sampleRingXY(x - 0.34, y + 0.12, 0.28, 0.16, 120, 8, 1, 2.0, 0.01);
+        }
+        if (type === 'miser') sampleRingXY(x + 0.35, y + 0.22, 0.28, 0.14, 110, 8, 1, 2.0, 0.012);
+      }
+    }
+
+    function addMechanism() {
+      sampleGear(0.0, 5.25, -0.66, 0.58, 32, 9, 1, 2.12);
+      sampleGear(-0.72, 4.48, -0.62, 0.36, 22, 9, 1, 2.04);
+      sampleGear(0.74, 4.48, -0.62, 0.32, 18, 9, 1, 2.0);
+      sampleGear(0.0, 2.15, -0.58, 0.44, 24, 9, 1, 2.05);
+      sampleGear(0.52, 6.14, -0.64, 0.24, 16, 9, 1, 1.96);
+      sampleLine([0, 5.25, -0.62], [0, 2.15, -0.62], 520, 9, 1, 2.0, 0.006);
+      sampleLine([-0.68, 4.48, -0.62], [0, 5.25, -0.62], 260, 9, 1, 1.95, 0.006);
+      sampleLine([0.74, 4.48, -0.62], [0, 5.25, -0.62], 220, 9, 1, 1.95, 0.006);
+      sampleLine([0.52, 6.14, -0.62], [0, 5.25, -0.62], 180, 9, 1, 1.95, 0.006);
+    }
+
+    function addContext() {
+      samplePlane(2400, -4.8, 4.8, -0.65, -0.48, -0.8, 10, 0, { size: 1.55 });
+      for (let i = 0; i < 42; i++) {
+        const x = -4.6 + i * 0.22;
+        sampleLine([x, -0.58, -0.78], [x + jitter(0.12), -0.58 + jitter(0.015), -0.78], 40, 10, 0, 1.48);
+      }
+      for (let b = 0; b < 16; b++) {
+        const x = -5.2 + b * 0.7 + jitter(0.12);
+        const h = 0.4 + rand() * 1.3;
+        sampleBoxSurface(260, 0.12 + rand() * 0.08, h * 0.5, 0.035, x, h * 0.5 - 0.45, -2.2 - rand() * 0.6, 10, 0, { size: 1.36, includeBack: false });
+      }
+    }
+
+    function addAtmosphere() {
+      for (let i = 0; i < 6000; i++) {
+        const a = rand() * TAU;
+        const r = 4.4 + Math.pow(rand(), 0.55) * 13.5;
+        const y = rand() * 13.5 - 1.25;
+        addParticle(Math.cos(a) * r + jitter(1.0), y, Math.sin(a) * r + jitter(1.0), 0, 0, 1.08 + rand() * 0.6);
+      }
+    }
+
+    function isGateVoid(x, y) {
+      const half = 0.76;
+      const spring = 1.18;
+      const top = 1.88;
+      if (y < 0.12 || y > top) return false;
+      if (y <= spring && Math.abs(x) < half) return true;
+      if (y > spring) {
+        const dy = (y - spring) / (top - spring);
+        const limit = half * Math.sqrt(Math.max(0, 1 - dy * dy));
+        return Math.abs(x) < limit;
+      }
+      return false;
+    }
+
+    function addMasonryLines(x0, x1, y0, y1, z, moduleId) {
+      for (let y = y0; y <= y1; y += 0.28) sampleLine([x0, y, z], [x1, y, z], 120, moduleId, 0, 1.45, 0.006);
+      let row = 0;
+      for (let y = y0; y < y1; y += 0.28) {
+        const offset = row % 2 ? 0.24 : 0;
+        for (let x = x0 + offset; x < x1; x += 0.48) sampleLine([x, y, z], [x, Math.min(y + 0.28, y1), z], 22, moduleId, 0, 1.35, 0.004);
+        row++;
+      }
+    }
+
+    function addNingboCityPlatform() {
+      sampleBoxSurface(17500, 3.55, 1.05, 1.46, 0, 1.05, 0, 1, 0, { size: 1.86 });
+      samplePlane(8200, -3.42, 3.42, 0.08, 2.1, 1.52, 1, 0, {
+        size: 1.94,
+        skip: isGateVoid
+      });
+      addMasonryLines(-3.35, 3.35, 0.12, 2.06, 1.56, 1);
+      addMasonryLines(-3.35, 3.35, 0.12, 2.06, -1.56, 1);
+      sampleBoxSurface(3600, 3.78, 0.16, 1.68, 0, 2.18, 0, 1, 0, { size: 2.0 });
+      sampleBoxSurface(3600, 3.2, 0.18, 1.45, 0, -0.08, 0, 10, 0, { size: 1.72 });
+    }
+
+    function addNingboGateway() {
+      sampleArch(0, 0.1, 1.62, 1.86, 1.7, 2, 0, 2.2);
+      sampleArch(0, 0.18, 1.16, 1.42, 1.78, 2, 1, 2.0);
+      for (const z of [1.5, 0.75, 0, -0.75, -1.5]) sampleArch(0, 0.12, 1.36, 1.68, z, 2, 1, 1.85);
+      sampleLine([-0.76, 0.12, 1.66], [-0.76, 0.12, -1.45], 220, 2, 1, 1.8, 0.006);
+      sampleLine([0.76, 0.12, 1.66], [0.76, 0.12, -1.45], 220, 2, 1, 1.8, 0.006);
+      sampleLine([-0.52, 1.88, 1.56], [-0.52, 1.88, -1.38], 180, 2, 1, 1.82, 0.006);
+      sampleLine([0.52, 1.88, 1.56], [0.52, 1.88, -1.38], 180, 2, 1, 1.82, 0.006);
+    }
+
+    function addNingboStairs() {
+      for (const sx of [-1, 1]) {
+        for (let i = 0; i < 14; i++) {
+          const t = i / 13;
+          const x = sx * (2.15 + t * 0.85);
+          const y = 0.18 + t * 1.95;
+          const z = 1.95 - t * 0.95;
+          sampleBoxSurface(150, 0.32, 0.035, 0.12, x, y, z, 3, 0, { size: 1.65 });
+          sampleLine([x - sx * 0.38, y + 0.06, z + 0.16], [x + sx * 0.34, y + 0.06, z + 0.16], 36, 3, 0, 1.75, 0.004);
+        }
+        sampleLine([sx * 2.05, 0.22, 2.16], [sx * 3.06, 2.12, 1.08], 260, 3, 0, 1.78, 0.006);
+        sampleLine([sx * 2.52, 0.22, 2.34], [sx * 3.45, 2.12, 1.22], 260, 3, 0, 1.78, 0.006);
+      }
+    }
+
+    function addNingboPavilion() {
+      sampleBoxSurface(5200, 2.85, 0.22, 1.42, 0, 2.55, 0, 4, 0, { size: 1.94 });
+      const columns = [-2.55, -1.45, -0.45, 0.45, 1.45, 2.55];
+      for (const x of columns) {
+        for (const z of [1.22, -1.22]) {
+          sampleBoxSurface(820, 0.055, 0.86, 0.055, x, 3.33, z, 4, 0, { size: 2.08 });
+        }
+      }
+      for (const z of [1.3, -1.3]) {
+        sampleLine([-2.75, 4.15, z], [2.75, 4.15, z], 420, 4, 0, 1.92);
+        sampleLine([-2.75, 3.05, z], [2.75, 3.05, z], 420, 4, 0, 1.82);
+        for (let i = 0; i < 5; i++) {
+          const x0 = -2.28 + i * 1.12;
+          sampleBoxSurface(520, 0.36, 0.42, 0.04, x0 + 0.45, 3.55, z + (z > 0 ? 0.04 : -0.04), 4, 0, { size: 1.78, includeBack: false });
+          for (let k = 0; k < 4; k++) {
+            const x = x0 + 0.16 + k * 0.18;
+            sampleLine([x, 3.18, z + (z > 0 ? 0.1 : -0.1)], [x, 3.98, z + (z > 0 ? 0.1 : -0.1)], 72, 4, 0, 1.55, 0.004);
+          }
+        }
+      }
+      for (const z of [1.42, -1.42]) {
+        for (let i = 0; i < 18; i++) {
+          const x = -2.7 + i * 5.4 / 17;
+          sampleBoxSurface(90, 0.06, 0.17, 0.045, x, 2.86, z, 4, 0, { size: 1.58 });
+        }
+      }
+    }
+
+    function sampleRoofPlane(width, depth, y, height, moduleId, coreFlag = 0) {
+      for (let i = 0; i < 6600; i++) {
+        const side = rand() < 0.5 ? 1 : -1;
+        const x = lerp(-width / 2, width / 2, rand());
+        const z = side * lerp(0.08, depth / 2, rand());
+        const ridgeDrop = Math.abs(z) / (depth / 2);
+        const yy = y + height * (1 - ridgeDrop) + jitter(0.012);
+        addParticle(x + jitter(0.014), yy, z + jitter(0.014), moduleId, coreFlag, 2.02);
+      }
+      for (const z of [-depth / 2, depth / 2]) {
+        sampleLine([-width / 2, y, z], [width / 2, y, z], 440, moduleId, coreFlag, 2.14);
+        sampleLine([-width / 2, y, z], [-width / 2 - 0.32, y + 0.18, z], 160, moduleId, coreFlag, 2.18);
+        sampleLine([width / 2, y, z], [width / 2 + 0.32, y + 0.18, z], 160, moduleId, coreFlag, 2.18);
+      }
+      sampleLine([-width / 2, y, -depth / 2], [0, y + height, 0], 420, moduleId, coreFlag, 2.14);
+      sampleLine([width / 2, y, -depth / 2], [0, y + height, 0], 420, moduleId, coreFlag, 2.14);
+      sampleLine([-width / 2, y, depth / 2], [0, y + height, 0], 420, moduleId, coreFlag, 2.14);
+      sampleLine([width / 2, y, depth / 2], [0, y + height, 0], 420, moduleId, coreFlag, 2.14);
+      sampleLine([-width / 2 * 0.72, y + height, 0], [width / 2 * 0.72, y + height, 0], 460, moduleId, coreFlag, 2.22);
+    }
+
+    function addNingboRoofsAndBrackets() {
+      sampleRoofPlane(6.35, 3.25, 4.16, 0.52, 5);
+      sampleRoofPlane(5.35, 2.70, 5.03, 0.46, 5);
+      sampleRoofPlane(4.10, 2.05, 5.86, 0.40, 5);
+      for (const y of [4.03, 4.90, 5.72]) {
+        const width = y < 4.5 ? 5.55 : y < 5.3 ? 4.7 : 3.55;
+        for (let i = 0; i < 13; i++) {
+          const x = -width / 2 + i * width / 12;
+          for (const z of [1.28, -1.28]) {
+            sampleBoxSurface(95, 0.08, 0.08, 0.08, x, y, z, 6, 0, { size: 1.72 });
+            sampleLine([x - 0.12, y - 0.04, z], [x, y - 0.24, z], 32, 6, 0, 1.65);
+            sampleLine([x + 0.12, y - 0.04, z], [x, y - 0.24, z], 32, 6, 0, 1.65);
+          }
+        }
+      }
+      for (const x of [-2.8, 2.8, -2.2, 2.2]) {
+        sampleLine([x, 4.05, 1.54], [x + Math.sign(x) * 0.42, 4.24, 1.66], 90, 5, 0, 2.05);
+        sampleLine([x, 4.05, -1.54], [x + Math.sign(x) * 0.42, 4.24, -1.66], 90, 5, 0, 2.05);
+      }
+    }
+
+    function addNingboClockTurret() {
+      sampleBoxSurface(3900, 0.82, 0.72, 0.82, 0, 6.55, 0, 7, 0, { size: 1.96 });
+      sampleRoofPlane(2.15, 1.72, 7.12, 0.34, 7);
+      sampleBoxSurface(900, 0.32, 0.20, 0.32, 0, 7.65, 0, 7, 0, { size: 1.98 });
+      for (const [x, z, face] of [[0, 0.86, 0], [0, -0.86, 2], [0.86, 0, 1], [-0.86, 0, 3]]) {
+        for (let i = 0; i < 640; i++) {
+          const a = rand() * TAU;
+          const r = 0.32 + jitter(0.012);
+          let px = Math.cos(a) * r;
+          let py = 6.55 + Math.sin(a) * r;
+          if (face === 0) addParticle(px, py, z + 0.08, 7, 1, 2.1);
+          if (face === 2) addParticle(-px, py, z - 0.08, 7, 1, 2.1);
+          if (face === 1) addParticle(x + 0.08, py, px, 7, 1, 2.1);
+          if (face === 3) addParticle(x - 0.08, py, -px, 7, 1, 2.1);
+        }
+      }
+      sampleLine([0, 7.66, 0], [0, 8.18, 0], 120, 7, 0, 2.0);
+      sampleLine([-0.28, 8.02, 0], [0.30, 8.02, 0], 110, 7, 0, 2.0);
+    }
+
+    function addNingboPlaquesAndTimekeeping() {
+      const plaqueYs = [1.82, 3.94, 5.05, 6.62];
+      const plaqueWs = [1.2, 1.55, 1.1, 0.72];
+      for (let i = 0; i < plaqueYs.length; i++) {
+        sampleBoxSurface(520, plaqueWs[i] / 2, 0.12, 0.04, 0, plaqueYs[i], 1.64, 8, 1, { size: 1.98, includeBack: false });
+      }
+      sampleRingXY(0.92, 3.12, 1.62, 0.24, 360, 8, 1, 2.05, 0.014);
+      sampleLine([0.92, 3.36, 1.62], [0.92, 3.8, 1.62], 96, 8, 1, 1.9);
+      sampleLine([-0.92, 3.36, 1.62], [-0.92, 3.76, 1.62], 96, 8, 1, 1.9);
+    }
+
+    function addNingboBellDrumMechanism() {
+      sampleGear(0.2, 3.8, -0.72, 0.46, 24, 9, 1, 2.05);
+      sampleGear(-0.52, 3.28, -0.76, 0.30, 18, 9, 1, 1.98);
+      sampleGear(0.78, 3.24, -0.76, 0.28, 16, 9, 1, 1.95);
+      sampleLine([-0.52, 3.28, -0.76], [0.2, 3.8, -0.72], 220, 9, 1, 1.9);
+      sampleLine([0.78, 3.24, -0.76], [0.2, 3.8, -0.72], 220, 9, 1, 1.9);
+      sampleBoxSurface(1200, 0.72, 0.42, 0.42, -0.7, 3.08, 0.02, 9, 1, { size: 2.0 });
+      sampleRingXY(-0.7, 3.08, 0.48, 0.48, 560, 9, 1, 2.08, 0.025);
+      sampleBoxSurface(920, 0.28, 0.38, 0.28, 0.9, 3.28, 0.12, 9, 1, { size: 2.04 });
+      sampleLine([0.62, 3.7, 0.12], [1.18, 3.7, 0.12], 96, 9, 1, 1.95);
+    }
+
+    function addParticleScanScaffold() {
+      for (const y of [-0.66, 0.04, 2.16, 4.18, 5.04, 5.88, 7.16]) {
+        const width = y < 0 ? 8.4 : y < 2.5 ? 7.3 : y < 4.8 ? 6.0 : y < 5.5 ? 5.0 : y < 6.4 ? 4.0 : 2.2;
+        sampleLine([-width / 2, y, 1.86], [width / 2, y, 1.86], 260, 10, 0, 1.58, 0.004);
+        sampleLine([-width / 2, y, -1.86], [width / 2, y, -1.86], 260, 10, 0, 1.58, 0.004);
+      }
+      for (const x of [-3.7, -2.85, 2.85, 3.7]) {
+        sampleLine([x, -0.68, 1.9], [x * 0.45, 7.3, 0.62], 360, 10, 0, 1.48, 0.006);
+      }
+      for (let i = 0; i < 4; i++) {
+        const y = 2.3 + i * 1.15;
+        sampleArc(0, y, 1.9, 4.2 - i * 0.35, Math.PI * 0.08, Math.PI * 0.92, 420, 0, 0, 1.34, 0.014);
+      }
+      for (const [x, y, z] of [[-3.4, 0.05, 1.9], [3.4, 0.05, 1.9], [-3.0, 2.15, 1.7], [3.0, 2.15, 1.7], [0, 7.96, 0]]) {
+        sampleRingXY(x, y, z, 0.12, 160, 10, 1, 1.7, 0.012);
+      }
+    }
+
+    function addNingboStreetContext() {
+      samplePlane(2600, -5.2, 5.2, -0.72, -0.48, -0.85, 10, 0, { size: 1.45 });
+      for (let i = 0; i < 55; i++) {
+        const x = -5.0 + i * 0.19;
+        sampleLine([x, -0.58, -0.82], [x + jitter(0.12), -0.58 + jitter(0.015), -0.82], 36, 10, 0, 1.36);
+      }
+      for (let b = 0; b < 20; b++) {
+        const x = -5.6 + b * 0.58 + jitter(0.08);
+        const h = 0.32 + rand() * 1.0;
+        const z = -2.4 - rand() * 0.8;
+        sampleBoxSurface(190, 0.11 + rand() * 0.06, h * 0.5, 0.035, x, h * 0.5 - 0.58, z, 10, 0, { size: 1.28, includeBack: false });
+      }
+      sampleLine([-4.4, -0.25, 1.85], [4.4, -0.25, 1.85], 520, 10, 0, 1.38);
+    }
+
+    function compactParticles(target) {
+      const count = home.length / 3;
+      if (count <= target) return;
+      const keepChance = clamp01(target / count);
+      const nh = [];
+      const ne = [];
+      const nm = [];
+      const nc = [];
+      const nd = [];
+      const ns = [];
+      const nz = [];
+      for (let i = 0; i < count; i++) {
+        if (rand() < keepChance) {
+          const j = i * 3;
+          nh.push(home[j], home[j + 1], home[j + 2]);
+          ne.push(exploded[j], exploded[j + 1], exploded[j + 2]);
+          nm.push(moduleIds[i]);
+          nc.push(coreFlags[i]);
+          nd.push(delays[i]);
+          ns.push(seeds[i]);
+          nz.push(sizes[i]);
+        }
+      }
+      home.length = 0;
+      exploded.length = 0;
+      moduleIds.length = 0;
+      coreFlags.length = 0;
+      delays.length = 0;
+      seeds.length = 0;
+      sizes.length = 0;
+      for (let i = 0; i < nh.length; i++) home.push(nh[i]);
+      for (let i = 0; i < ne.length; i++) exploded.push(ne[i]);
+      for (let i = 0; i < nm.length; i++) moduleIds.push(nm[i]);
+      for (let i = 0; i < nc.length; i++) coreFlags.push(nc[i]);
+      for (let i = 0; i < nd.length; i++) delays.push(nd[i]);
+      for (let i = 0; i < ns.length; i++) seeds.push(ns[i]);
+      for (let i = 0; i < nz.length; i++) sizes.push(nz[i]);
+    }
+
+    addNingboStreetContext();
+    addNingboCityPlatform();
+    addNingboGateway();
+    addNingboStairs();
+    addNingboPavilion();
+    addNingboRoofsAndBrackets();
+    addNingboClockTurret();
+    addNingboPlaquesAndTimekeeping();
+    addNingboBellDrumMechanism();
+    addParticleScanScaffold();
+    addAtmosphere();
+    compactParticles(TARGET_PARTICLES);
+
+    const positionArray = new Float32Array(home);
+    const explodedArray = new Float32Array(exploded);
+    const moduleArray = new Float32Array(moduleIds);
+    const coreArray = new Float32Array(coreFlags);
+    const delayArray = new Float32Array(delays);
+    const seedArray = new Float32Array(seeds);
+    const sizeArray = new Float32Array(sizes);
+
+    window.__ningboDrumTowerDiagnostics = {
+      particleCount: positionArray.length / 3,
+      drawCallParticleGeometries: 1,
+      modules: MODULES.length - 1,
+      hasExplodedPositions: true,
+      hasCityGatePlatform: true,
+      hasArchedGateway: true,
+      hasSideStairs: true,
+      hasFiveBayPavilion: true,
+      hasTripleEavesRoof: true,
+      hasDougongAndEaves: true,
+      hasClockTurret: true,
+      hasPlaquesAndTimekeeping: true,
+      hasBellDrumMechanism: true,
+      hasSolidReliefModel: false,
+      has3DNingboGulouRelief: true,
+      hasPedestrianStreetContext: true,
+      renderMode: 'pure particle diffusion, no large solid color blocks',
+      styleReference: 'Prague astronomical clock particle page / matched interaction form'
+    };
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positionArray, 3));
+    geometry.setAttribute('aExploded', new THREE.BufferAttribute(explodedArray, 3));
+    geometry.setAttribute('aModule', new THREE.BufferAttribute(moduleArray, 1));
+    geometry.setAttribute('aCore', new THREE.BufferAttribute(coreArray, 1));
+    geometry.setAttribute('aDelay', new THREE.BufferAttribute(delayArray, 1));
+    geometry.setAttribute('aSeed', new THREE.BufferAttribute(seedArray, 1));
+    geometry.setAttribute('aSize', new THREE.BufferAttribute(sizeArray, 1));
+    geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 4.4, 0.35), 19);
+
+    const material = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      uniforms: {
+        uTime: { value: 0 },
+        uProgress: { value: 0 },
+        uDpr: { value: Math.min(window.devicePixelRatio || 1, DPR_LIMIT) },
+        uMinY: { value: MIN_Y },
+        uMaxY: { value: MAX_Y }
+      },
+      vertexShader: `
+        attribute vec3 aExploded;
+        attribute float aModule;
+        attribute float aCore;
+        attribute float aDelay;
+        attribute float aSeed;
+        attribute float aSize;
+
+        uniform float uTime;
+        uniform float uProgress;
+        uniform float uDpr;
+        uniform float uMinY;
+        uniform float uMaxY;
+
+        varying float vY;
+        varying float vAlpha;
+        varying float vProgress;
+        varying float vCore;
+        varying float vModule;
+        varying float vFog;
+
+        float hash(vec3 p) {
+          p = fract(p * 0.3183099 + vec3(0.11, 0.17, 0.23));
+          p *= 17.0;
+          return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+        }
+
+        float noise(vec3 x) {
+          vec3 i = floor(x);
+          vec3 f = fract(x);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(
+            mix(
+              mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
+              mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x),
+              f.y
+            ),
+            mix(
+              mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
+              mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x),
+              f.y
+            ),
+            f.z
+          );
+        }
+
+        vec3 curlNoise(vec3 p) {
+          float e = 0.12;
+          float n1 = noise(p + vec3(0.0, e, 0.0));
+          float n2 = noise(p - vec3(0.0, e, 0.0));
+          float a = (n1 - n2) / (2.0 * e);
+          n1 = noise(p + vec3(0.0, 0.0, e));
+          n2 = noise(p - vec3(0.0, 0.0, e));
+          float b = (n1 - n2) / (2.0 * e);
+          n1 = noise(p + vec3(e, 0.0, 0.0));
+          n2 = noise(p - vec3(e, 0.0, 0.0));
+          float c = (n1 - n2) / (2.0 * e);
+          return normalize(vec3(a - b, b - c, c - a) + 0.0001);
+        }
+
+        float ease(float x) {
+          x = clamp(x, 0.0, 1.0);
+          return x * x * (3.0 - 2.0 * x);
+        }
+
+        void main() {
+          float local = ease((uProgress - aDelay) / max(0.001, 1.0 - aDelay));
+          if (aModule < 0.5) local = uProgress * 0.45;
+
+          vec3 p = mix(position, aExploded, local);
+          float transition = sin(local * 3.14159265);
+          vec3 c = curlNoise(position * 0.25 + vec3(aSeed * 7.0, uTime * 0.12, aModule * 0.37));
+          p += c * transition * mix(0.04, 0.22, aCore);
+
+          if (aModule < 0.5) {
+            float drift = sin(uTime * 0.12 + aSeed * 11.0);
+            p += c * (0.11 + 0.17 * drift);
+          }
+
+          vec4 mv = modelViewMatrix * vec4(p, 1.0);
+          gl_Position = projectionMatrix * mv;
+
+          float dist = max(0.001, -mv.z);
+          float size = aSize * mix(0.90, 0.82, local) * uDpr * (182.0 / dist);
+          gl_PointSize = clamp(size * 1.26, 0.86, 5.55);
+
+          vY = clamp((position.y - uMinY) / (uMaxY - uMinY), 0.0, 1.0);
+          vProgress = local;
+          vCore = aCore;
+          vModule = aModule;
+          vFog = smoothstep(48.0, 8.0, length(mv.xyz));
+          vAlpha = mix(0.136, 0.105, local);
+          if (aModule < 0.5) vAlpha *= 0.22;
+          if (aCore > 0.5) vAlpha *= 1.18;
+        }
+      `,
+      fragmentShader: `
+        precision highp float;
+
+        varying float vY;
+        varying float vAlpha;
+        varying float vProgress;
+        varying float vCore;
+        varying float vModule;
+        varying float vFog;
+
+        void main() {
+          vec2 uv = gl_PointCoord - vec2(0.5);
+          float d = length(uv);
+          float core = smoothstep(0.5, 0.0, d);
+          float halo = smoothstep(0.5, 0.16, d) * 0.62;
+          float alpha = (core + halo) * vAlpha * vFog;
+          if (vModule > 0.5 && vModule < 1.5) alpha *= 0.54;
+          if (vModule > 1.5 && vModule < 2.5) alpha *= 0.92;
+          if (vModule > 2.5 && vModule < 3.5) alpha *= 1.12;
+          if (vModule > 3.5 && vModule < 4.5) alpha *= 1.38;
+          if (vModule > 4.5 && vModule < 7.5) alpha *= 1.52;
+          if (vModule > 6.5 && vModule < 9.5) alpha *= 1.62;
+          if (alpha < 0.012) discard;
+
+          vec3 stone = vec3(0.50, 0.55, 0.52);
+          vec3 gold = vec3(0.95, 0.58, 0.18);
+          vec3 cyan = vec3(0.62, 0.92, 1.0);
+          vec3 blue = vec3(0.18, 0.47, 0.82);
+          vec3 green = vec3(0.32, 0.86, 0.66);
+          vec3 red = vec3(0.92, 0.24, 0.18);
+
+          vec3 col = mix(gold, stone, smoothstep(0.08, 0.62, vY));
+          col = mix(col, cyan, smoothstep(0.55, 1.0, vY) * 0.72);
+
+          if (vModule > 0.5 && vModule < 1.5) col = stone;
+          if (vModule > 1.5 && vModule < 2.5) col = mix(stone, cyan, 0.28);
+          if (vModule > 2.5 && vModule < 3.5) col = mix(cyan, stone, 0.35);
+          if (vModule > 3.5 && vModule < 4.5) col = mix(blue, gold, 0.35);
+          if (vModule > 4.5 && vModule < 5.5) col = mix(gold, green, 0.32);
+          if (vModule > 5.5 && vModule < 6.5) col = mix(gold, red, 0.22);
+          if (vModule > 6.5 && vModule < 7.5) col = mix(gold, stone, 0.2);
+          if (vModule > 7.5 && vModule < 8.5) col = mix(stone, gold, 0.35);
+          if (vModule > 8.5 && vModule < 9.5) col = mix(cyan, gold, 0.42);
+          if (vModule > 9.5) col = mix(stone, cyan, 0.16);
+
+          if (vCore > 0.5) col = mix(col, vec3(1.0, 0.74, 0.28), 0.34);
+          col = mix(col, vec3(0.44, 0.72, 0.98), vProgress * 0.20);
+          col *= mix(0.9, 0.68, vProgress);
+          gl_FragColor = vec4(col, alpha);
+        }
+      `
+    });
+
+    const points = new THREE.Points(geometry, material);
+    points.frustumCulled = false;
+    scene.add(points);
+
+    const solidRoot = new THREE.Group();
+    const solidPieces = [];
+    solidRoot.visible = false;
+    scene.add(solidRoot);
+
+    function solidLocal(progress, moduleId) {
+      if (moduleId === 0) return progress * 0.45;
+      const meta = moduleMeta(moduleId);
+      return smooth01((progress - meta.delay) / Math.max(0.001, 1 - meta.delay));
+    }
+
+    function mat(color, opacity = 1) {
+      return new THREE.MeshBasicMaterial({
+        color,
+        transparent: opacity < 1,
+        opacity,
+        side: THREE.DoubleSide,
+        depthWrite: opacity > 0.92
+      });
+    }
+
+    function textureMat(texture, opacity = 1) {
+      return new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        opacity,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      });
+    }
+
+    function registerSolid(object, moduleId, pull = [0, 0, 0]) {
+      const meta = moduleMeta(moduleId);
+      object.userData.home = object.position.clone();
+      object.userData.moduleId = moduleId;
+      object.userData.exploded = object.position.clone().add(new THREE.Vector3(
+        meta.xOffset + pull[0],
+        meta.yOffset + pull[1],
+        meta.zOffset + pull[2]
+      ));
+      solidPieces.push(object);
+      solidRoot.add(object);
+      return object;
+    }
+
+    function addBox(x, y, z, w, h, d, color, moduleId, opacity = 1, pull = [0, 0, 0]) {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color, opacity));
+      mesh.position.set(x, y, z);
+      return registerSolid(mesh, moduleId, pull);
+    }
+
+    function addPlane(x, y, z, w, h, material, moduleId, pull = [0, 0, 0]) {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), material);
+      mesh.position.set(x, y, z);
+      return registerSolid(mesh, moduleId, pull);
+    }
+
+    function addCircle(x, y, z, r, color, moduleId, opacity = 1, pull = [0, 0, 0], segments = 96) {
+      const mesh = new THREE.Mesh(new THREE.CircleGeometry(r, segments), mat(color, opacity));
+      mesh.position.set(x, y, z);
+      return registerSolid(mesh, moduleId, pull);
+    }
+
+    function addRing(x, y, z, inner, outer, color, moduleId, opacity = 1, pull = [0, 0, 0]) {
+      const mesh = new THREE.Mesh(new THREE.RingGeometry(inner, outer, 144), mat(color, opacity));
+      mesh.position.set(x, y, z);
+      return registerSolid(mesh, moduleId, pull);
+    }
+
+    function addTorus(x, y, z, radius, tube, color, moduleId, opacity = 1, pull = [0, 0, 0]) {
+      const mesh = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 18, 168), mat(color, opacity));
+      mesh.position.set(x, y, z);
+      return registerSolid(mesh, moduleId, pull);
+    }
+
+    function addCylinderDisk(x, y, z, radius, depth, color, moduleId, opacity = 1, pull = [0, 0, 0]) {
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, depth, 144), mat(color, opacity));
+      mesh.rotation.x = Math.PI / 2;
+      mesh.position.set(x, y, z);
+      return registerSolid(mesh, moduleId, pull);
+    }
+
+    function addCone(x, y, z, radius, height, color, moduleId, opacity = 1, pull = [0, 0, 0]) {
+      const mesh = new THREE.Mesh(new THREE.ConeGeometry(radius, height, 36), mat(color, opacity));
+      mesh.position.set(x, y, z);
+      return registerSolid(mesh, moduleId, pull);
+    }
+
+    function addLineMesh(points, color, moduleId, pull = [0, 0, 0], opacity = 1) {
+      const geometry = new THREE.BufferGeometry().setFromPoints(points.map((p) => new THREE.Vector3(p[0], p[1], p[2])));
+      const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color, transparent: opacity < 1, opacity }));
+      line.position.set(0, 0, 0);
+      return registerSolid(line, moduleId, pull);
+    }
+
+    function makeAstronomicalDialTexture() {
+      const c = document.createElement('canvas');
+      c.width = 1024;
+      c.height = 1024;
+      const ctx = c.getContext('2d');
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.save();
+      ctx.translate(512, 512);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      ctx.beginPath();
+      ctx.arc(0, 0, 486, 0, TAU);
+      ctx.clip();
+      ctx.fillStyle = '#071018';
+      ctx.fillRect(-512, -512, 1024, 1024);
+
+      ctx.fillStyle = '#1f68bf';
+      ctx.beginPath();
+      ctx.arc(0, 0, 430, Math.PI, TAU);
+      ctx.lineTo(0, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#b85b34';
+      ctx.beginPath();
+      ctx.arc(0, 0, 430, 0, Math.PI);
+      ctx.lineTo(0, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#06101a';
+      ctx.beginPath();
+      ctx.arc(0, 0, 258, 0, TAU);
+      ctx.fill();
+
+      ctx.fillStyle = '#143e8a';
+      ctx.beginPath();
+      ctx.arc(0, -62, 270, Math.PI, TAU);
+      ctx.fill();
+
+      ctx.strokeStyle = '#f6c650';
+      ctx.lineWidth = 30;
+      ctx.beginPath();
+      ctx.arc(0, 0, 470, 0, TAU);
+      ctx.stroke();
+      ctx.strokeStyle = '#fff0a6';
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.arc(0, 0, 430, 0, TAU);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, 285, 0, TAU);
+      ctx.stroke();
+
+      for (let i = 0; i < 24; i++) {
+        const a = -Math.PI / 2 + i * TAU / 24;
+        const major = i % 3 === 0;
+        ctx.strokeStyle = major ? '#fff0a6' : 'rgba(255,240,166,0.68)';
+        ctx.lineWidth = major ? 7 : 4;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * 405, Math.sin(a) * 405);
+        ctx.lineTo(Math.cos(a) * 460, Math.sin(a) * 460);
+        ctx.stroke();
+      }
+
+      ctx.save();
+      ctx.rotate(-0.34);
+      ctx.strokeStyle = '#f5d35e';
+      ctx.lineWidth = 46;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 338, 168, 0, 0, TAU);
+      ctx.stroke();
+      ctx.strokeStyle = '#315c43';
+      ctx.lineWidth = 12;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 338, 168, 0, 0, TAU);
+      ctx.stroke();
+      const signs = ['♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓'];
+      ctx.fillStyle = '#17321f';
+      ctx.font = '700 42px Georgia, serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (let i = 0; i < 12; i++) {
+        const a = i * TAU / 12;
+        ctx.fillText(signs[i], Math.cos(a) * 338, Math.sin(a) * 168 + 2);
+      }
+      ctx.restore();
+
+      ctx.strokeStyle = '#fff0a6';
+      ctx.lineWidth = 10;
+      for (let i = 0; i < 12; i++) {
+        const a = -Math.PI / 2 + i * TAU / 12;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * 75, Math.sin(a) * 75);
+        ctx.lineTo(Math.cos(a) * 342, Math.sin(a) * 342);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = '#f7d45b';
+      ctx.lineWidth = 20;
+      const sunA = -0.72;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(sunA) * 382, Math.sin(sunA) * 382);
+      ctx.stroke();
+      ctx.fillStyle = '#ffdf5d';
+      ctx.beginPath();
+      ctx.arc(Math.cos(sunA) * 382, Math.sin(sunA) * 382, 48, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = '#fff0a6';
+      ctx.lineWidth = 8;
+      ctx.stroke();
+
+      const moonA = 1.85;
+      ctx.strokeStyle = '#c9f1ff';
+      ctx.lineWidth = 12;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(moonA) * 318, Math.sin(moonA) * 318);
+      ctx.stroke();
+      const mx = Math.cos(moonA) * 318;
+      const my = Math.sin(moonA) * 318;
+      ctx.fillStyle = '#eaf8ff';
+      ctx.beginPath();
+      ctx.arc(mx, my, 38, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = '#071018';
+      ctx.beginPath();
+      ctx.arc(mx + 18, my - 2, 36, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = '#c9f1ff';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.arc(mx, my, 38, 0, TAU);
+      ctx.stroke();
+
+      ctx.fillStyle = '#fff4d6';
+      ctx.font = '700 38px Georgia, serif';
+      ctx.textAlign = 'center';
+      for (let i = 0; i < 12; i++) {
+        const a = -Math.PI / 2 + i * TAU / 12;
+        ctx.fillText(String(i === 0 ? 12 : i), Math.cos(a) * 360, Math.sin(a) * 360 + 4);
+      }
+
+      ctx.restore();
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function makeCalendarTexture() {
+      const c = document.createElement('canvas');
+      c.width = 1024;
+      c.height = 1024;
+      const ctx = c.getContext('2d');
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.save();
+      ctx.translate(512, 512);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.arc(0, 0, 486, 0, TAU);
+      ctx.clip();
+      ctx.fillStyle = '#f5e7c7';
+      ctx.fillRect(-512, -512, 1024, 1024);
+
+      for (let i = 0; i < 12; i++) {
+        const a0 = -Math.PI / 2 + i * TAU / 12;
+        const a1 = -Math.PI / 2 + (i + 1) * TAU / 12;
+        ctx.fillStyle = i % 2 ? '#d9b56f' : '#9fb5a0';
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, 440, a0, a1);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#fff4d6';
+        ctx.lineWidth = 5;
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = '#f7edcf';
+      ctx.beginPath();
+      ctx.arc(0, 0, 284, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = '#8a5c28';
+      ctx.lineWidth = 18;
+      ctx.stroke();
+
+      for (let i = 0; i < 12; i++) {
+        const a = -Math.PI / 2 + i * TAU / 12;
+        const x = Math.cos(a) * 352;
+        const y = Math.sin(a) * 352;
+        ctx.fillStyle = '#fff4d6';
+        ctx.beginPath();
+        ctx.arc(x, y, 54, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = '#7b5a2f';
+        ctx.lineWidth = 7;
+        ctx.stroke();
+        ctx.fillStyle = i % 2 ? '#395f50' : '#9b3e32';
+        ctx.fillRect(x - 22, y - 18, 44, 36);
+        ctx.fillStyle = '#f6c650';
+        ctx.beginPath();
+        ctx.arc(x, y - 32, 12, 0, TAU);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = '#345f8c';
+      ctx.beginPath();
+      ctx.arc(0, 0, 132, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = '#f6c650';
+      ctx.beginPath();
+      ctx.moveTo(0, -92);
+      ctx.lineTo(88, 70);
+      ctx.lineTo(-88, 70);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#f6c650';
+      ctx.lineWidth = 24;
+      ctx.beginPath();
+      ctx.arc(0, 0, 468, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function addFigureMesh(x, y, z, moduleId, color, kind) {
+      addCircle(x, y + 0.48, z + 0.02, 0.13, color, moduleId, 0.96, [0, 0, 0.18], 32);
+      addBox(x, y + 0.08, z, 0.2, 0.62, 0.08, color, moduleId, 0.9, [0, 0, 0.18]);
+      addBox(x - 0.18, y + 0.12, z + 0.02, 0.08, 0.34, 0.06, color, moduleId, 0.88, [0, 0, 0.18]);
+      addBox(x + 0.18, y + 0.12, z + 0.02, 0.08, 0.34, 0.06, color, moduleId, 0.88, [0, 0, 0.18]);
+      if (kind === 'death') {
+        addBox(x + 0.33, y + 0.1, z + 0.08, 0.05, 0.92, 0.04, 0xeaf8ff, moduleId, 0.95, [0, 0, 0.22]);
+        addCircle(x - 0.32, y + 0.16, z + 0.08, 0.12, 0xeaf8ff, moduleId, 0.95, [0, 0, 0.22], 32);
+      }
+      if (kind === 'miser') addCircle(x + 0.32, y + 0.2, z + 0.08, 0.13, 0xf6c650, moduleId, 0.95, [0, 0, 0.22], 32);
+      if (kind === 'turk') addCircle(x + 0.08, y + 0.62, z + 0.08, 0.09, 0xd12f2f, moduleId, 0.95, [0, 0, 0.22], 32);
+    }
+
+    function buildSolidOrlojModel() {
+      // Stone wall and Gothic architectural relief.
+      addBox(0, 5.18, -0.55, 6.9, 10.9, 0.22, 0x8d8572, 1, 0.33);
+      addBox(0, 5.18, -0.43, 6.5, 10.45, 0.08, 0xc8beb0, 1, 0.18);
+      for (const x of [-3.18, 3.18]) addBox(x, 5.18, -0.23, 0.16, 10.62, 0.22, 0xd7d0be, 2, 0.78);
+      for (const y of [0.04, 3.55, 6.94, 9.55]) addBox(0, y, -0.21, 6.62, 0.12, 0.18, 0xd7d0be, 2, 0.72);
+      addRing(0, 5.25, 0.02, 1.74, 1.92, 0xd8cba3, 2, 0.92);
+      addRing(0, 2.15, 0.02, 1.16, 1.32, 0xd8cba3, 2, 0.9);
+      addTorus(0, 5.25, 0.16, 1.86, 0.045, 0xe2d6b5, 2, 0.88);
+      addTorus(0, 2.15, 0.15, 1.26, 0.038, 0xe2d6b5, 2, 0.86);
+      for (const x of [-1.54, 1.54, -2.35, 2.35]) addBox(x, 6.45, 0.05, 0.12, 5.6, 0.18, 0xd2c8ac, 2, 0.86);
+      for (const x of [-2.92, -2.62, 2.62, 2.92]) {
+        addBox(x, 8.88, 0.1, 0.08, 0.72, 0.12, 0xd7d0be, 2, 0.82);
+        addCone(x, 9.38, 0.12, 0.12, 0.46, 0xd7d0be, 2, 0.84);
+      }
+      for (let row = 0; row < 9; row++) {
+        const y = 0.72 + row * 1.03;
+        for (const x of [-2.88, -2.48, 2.48, 2.88]) {
+          addBox(x, y, 0.02, 0.24, 0.08, 0.08, 0xbdb39d, 1, 0.42);
+        }
+      }
+
+      // Apostle windows and small figures above the astronomical dial.
+      for (const cx of [-0.82, 0.82]) {
+        addBox(cx, 8.08, 0.2, 0.84, 1.05, 0.14, 0x0f2235, 3, 0.96);
+        addBox(cx, 8.08, 0.28, 0.62, 0.78, 0.08, 0x234a68, 3, 0.92);
+        addRing(cx, 8.62, 0.36, 0.22, 0.32, 0xd9c891, 3, 0.9);
+        for (let j = 0; j < 3; j++) {
+          const x = cx - 0.2 + j * 0.2;
+          addCircle(x, 8.46, 0.42, 0.055, 0xf2ddbd, 3, 1, [0, 0, 0.22], 24);
+          addBox(x, 8.06, 0.4, 0.09, 0.48, 0.06, 0xcfc7b2, 3, 0.95, [0, 0, 0.22]);
+        }
+      }
+      addBox(0, 8.9, 0.18, 3.45, 0.14, 0.18, 0xd6c590, 3, 0.9);
+      addCircle(0, 9.26, 0.36, 0.16, 0xf0c85b, 3, 0.94, [0, 0, 0.2], 48);
+      addCone(0, 9.52, 0.36, 0.14, 0.34, 0xf0c85b, 3, 0.94, [0, 0, 0.2]);
+
+      // Realistic colored Orloj face: astronomical dial, zodiac ring, sun/moon and calendar plate.
+      addCylinderDisk(0, 5.25, 0.38, 1.88, 0.2, 0x20150c, 4, 0.7, [0.28, 0.02, 0.1]);
+      addPlane(0, 5.25, 0.5, 3.52, 3.52, textureMat(makeAstronomicalDialTexture(), 0.96), 4, [0.35, 0.02, 0.18]);
+      addRing(0, 5.25, 0.64, 1.78, 1.95, 0xf6c650, 4, 0.94, [0.35, 0.02, 0.24]);
+      addTorus(0, 5.25, 0.78, 1.86, 0.065, 0xffd25a, 4, 0.98, [0.42, 0.02, 0.3]);
+      addTorus(0, 5.25, 0.82, 1.48, 0.035, 0xffec9b, 4, 0.92, [0.42, 0.02, 0.32]);
+      for (let i = 0; i < 24; i++) {
+        const a = -Math.PI / 2 + i * TAU / 24;
+        addBox(Math.cos(a) * 1.68, 5.25 + Math.sin(a) * 1.68, 0.86, 0.055, 0.15, 0.045, 0xffedb2, 4, 0.94, [0.42, 0.02, 0.34]);
+      }
+      addCylinderDisk(0, 2.15, 0.36, 1.3, 0.18, 0x4d3421, 7, 0.62, [0.2, -0.08, 0.1]);
+      addPlane(0, 2.15, 0.48, 2.52, 2.52, textureMat(makeCalendarTexture(), 0.96), 7, [0.25, -0.08, 0.18]);
+      addRing(0, 2.15, 0.62, 1.23, 1.38, 0xf6c650, 7, 0.94, [0.25, -0.08, 0.22]);
+      addTorus(0, 2.15, 0.74, 1.3, 0.052, 0xffd25a, 7, 0.96, [0.32, -0.08, 0.28]);
+
+      const zodiac = addTorus(0.02, 5.27, 0.88, 0.47, 0.018, 0xf5d35e, 5, 0.96, [0.62, 0.08, 0.36]);
+      zodiac.scale.x = 2.52;
+      zodiac.scale.y = 1.13;
+      zodiac.rotation.z = -0.34;
+      zodiac.userData.homeScale = zodiac.scale.clone();
+      const sunA = -0.72;
+      addLineMesh([[0, 5.25, 0.88], [Math.cos(sunA) * 1.34, 5.25 + Math.sin(sunA) * 1.34, 0.88]], 0xf7d45b, 6, [0.78, 0.16, 0.38], 0.96);
+      addCircle(Math.cos(sunA) * 1.34, 5.25 + Math.sin(sunA) * 1.34, 0.98, 0.18, 0xffdf5d, 6, 1, [0.78, 0.16, 0.42], 48);
+      const moonA = 1.85;
+      addLineMesh([[0, 5.25, 0.86], [Math.cos(moonA) * 1.14, 5.25 + Math.sin(moonA) * 1.14, 0.86]], 0xc9f1ff, 6, [0.78, 0.16, 0.38], 0.9);
+      addCircle(Math.cos(moonA) * 1.14, 5.25 + Math.sin(moonA) * 1.14, 1.0, 0.14, 0xeaf8ff, 6, 1, [0.78, 0.16, 0.42], 48);
+      addCircle(Math.cos(moonA) * 1.14 + 0.065, 5.25 + Math.sin(moonA) * 1.14 + 0.015, 1.02, 0.12, 0x06101e, 6, 0.92, [0.78, 0.16, 0.43], 48);
+
+      // Four famous animated figures flanking the dials.
+      addFigureMesh(-2.36, 6.48, 0.36, 8, 0xe8dfcc, 'vanity');
+      addFigureMesh(2.36, 6.48, 0.36, 8, 0xb88742, 'turk');
+      addFigureMesh(-2.22, 4.0, 0.36, 8, 0xd2c6b2, 'miser');
+      addFigureMesh(2.22, 4.0, 0.36, 8, 0xeaf8ff, 'death');
+      addFigureMesh(-1.82, 2.18, 0.34, 8, 0xcbbba1, 'chronicler');
+      addFigureMesh(1.82, 2.18, 0.34, 8, 0xcfc7b2, 'astronomer');
+      addCircle(0, 3.38, 0.32, 0.11, 0xf0c85b, 8, 0.88, [0, 0, 0.16], 36);
+      addBox(0, 3.04, 0.3, 0.2, 0.46, 0.06, 0xd8cba3, 8, 0.88, [0, 0, 0.16]);
+
+      // Exposed clockwork layer for exploded mode.
+      for (const [x, y, r] of [[0, 5.25, 0.56], [-0.72, 4.48, 0.36], [0.74, 4.48, 0.32], [0, 2.15, 0.44], [0.52, 6.14, 0.24]]) {
+        const gear = addTorus(x, y, -0.58, r * 0.86, r * 0.08, 0x9ee6ff, 9, 0.76, CORE_PULL[9]);
+        gear.userData.spin = (0.6 + r) * (x < 0 ? -1 : 1);
+      }
+      addLineMesh([[0, 5.25, -0.56], [0, 2.15, -0.56]], 0x9ee6ff, 9, CORE_PULL[9], 0.72);
+      addLineMesh([[-0.72, 4.48, -0.56], [0, 5.25, -0.56], [0.74, 4.48, -0.56]], 0x9ee6ff, 9, CORE_PULL[9], 0.72);
+    }
+
+    function addRoofSolid(cx, y, z, width, depth, height, color, moduleId, opacity = 0.92, pull = [0, 0, 0]) {
+      const hw = width / 2;
+      const hd = depth / 2;
+      const rw = width * 0.34;
+      const vertices = new Float32Array([
+        -hw, 0, -hd,
+         hw, 0, -hd,
+         hw, 0,  hd,
+        -hw, 0,  hd,
+        -rw, height, 0,
+         rw, height, 0
+      ]);
+      const indices = [
+        0, 1, 4, 1, 5, 4,
+        3, 4, 2, 2, 4, 5,
+        0, 4, 3,
+        1, 2, 5,
+        0, 3, 2, 0, 2, 1
+      ];
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, mat(color, opacity));
+      mesh.position.set(cx, y, z);
+      return registerSolid(mesh, moduleId, pull);
+    }
+
+    function addClockDialSolid(x, y, z, moduleId, pull, side = 'front') {
+      const dial = addCircle(x, y, z, 0.31, 0xf8f2d8, moduleId, 0.96, pull, 64);
+      const ring = addRing(x, y, z + (side === 'front' ? 0.018 : -0.018), 0.26, 0.31, 0x9ee6ff, moduleId, 0.92, pull);
+      if (side === 'right') {
+        dial.rotation.y = Math.PI / 2;
+        ring.rotation.y = Math.PI / 2;
+      } else if (side === 'left') {
+        dial.rotation.y = -Math.PI / 2;
+        ring.rotation.y = -Math.PI / 2;
+      } else if (side === 'back') {
+        dial.rotation.y = Math.PI;
+        ring.rotation.y = Math.PI;
+      }
+      const hand1 = addLineMesh([[x, y, z + 0.04], [x, y + 0.18, z + 0.04]], 0x0b1722, moduleId, pull, 0.92);
+      const hand2 = addLineMesh([[x, y, z + 0.045], [x + 0.16, y - 0.11, z + 0.045]], 0x0b1722, moduleId, pull, 0.92);
+      if (side === 'right' || side === 'left') {
+        hand1.rotation.y = side === 'right' ? Math.PI / 2 : -Math.PI / 2;
+        hand2.rotation.y = hand1.rotation.y;
+      }
+    }
+
+    function buildSolidNingboModel() {
+      // Lower brick city gate: assembled with separate front blocks so the arched
+      // passage remains visibly open.
+      addBox(0, 0.25, 0, 7.2, 0.32, 3.1, 0x867b66, 10, 0.72);
+      addBox(0, 1.08, -0.08, 7.0, 2.12, 2.78, 0x6f6757, 1, 0.28);
+      addBox(-2.15, 1.08, 1.50, 2.36, 2.02, 0.18, 0xa69980, 1, 0.78);
+      addBox(2.15, 1.08, 1.50, 2.36, 2.02, 0.18, 0xa69980, 1, 0.78);
+      addBox(0, 1.78, 1.50, 1.58, 0.66, 0.18, 0xa69980, 1, 0.78);
+      addBox(0, 0.66, -0.03, 1.42, 1.12, 3.0, 0x06121f, 2, 0.88, CORE_PULL[2]);
+      addRing(0, 1.2, 1.62, 0.72, 0.86, 0xf5ead0, 2, 0.86, CORE_PULL[2]);
+      addBox(0, 2.22, 0, 7.48, 0.28, 3.22, 0xa99d84, 1, 0.78);
+      for (let i = 0; i < 14; i++) {
+        const x = -3.0 + i * 0.46;
+        addBox(x, 1.92, 1.66, 0.22, 0.06, 0.08, 0xefe5c7, 1, 0.72);
+      }
+
+      // Symmetric side stair fragments.
+      for (const sx of [-1, 1]) {
+        for (let i = 0; i < 12; i++) {
+          const t = i / 11;
+          addBox(sx * (2.18 + t * 0.9), 0.28 + t * 1.72, 1.95 - t * 0.86, 0.62, 0.07, 0.26, 0xc7baa2, 3, 0.82, [sx < 0 ? -0.55 : 0.2, 0, 0.38]);
+        }
+      }
+
+      // Five-bay timber pavilion.
+      addBox(0, 2.55, 0, 5.9, 0.24, 2.72, 0xc9bfa7, 4, 0.88);
+      addBox(0, 3.55, 0, 5.36, 1.68, 2.32, 0xb3422e, 4, 0.26);
+      for (const x of [-2.55, -1.45, -0.45, 0.45, 1.45, 2.55]) {
+        for (const z of [1.22, -1.22]) addBox(x, 3.32, z, 0.12, 1.58, 0.12, 0x9f2f25, 4, 0.92);
+      }
+      for (const z of [1.28, -1.28]) {
+        addBox(0, 4.13, z, 5.6, 0.14, 0.14, 0xd8b06b, 4, 0.86);
+        addBox(0, 3.05, z, 5.6, 0.12, 0.12, 0xd8b06b, 4, 0.82);
+        for (let i = 0; i < 5; i++) {
+          const x = -2.0 + i * 1.0;
+          addBox(x, 3.54, z + (z > 0 ? 0.06 : -0.06), 0.7, 0.76, 0.08, 0x12314a, 4, 0.86);
+        }
+      }
+
+      // Triple hip-and-gable eaves and brackets.
+      addRoofSolid(0, 4.16, 0, 6.45, 3.32, 0.50, 0x2d7d73, 5, 0.92);
+      addRoofSolid(0, 5.03, 0, 5.38, 2.74, 0.46, 0x2d7d73, 5, 0.92);
+      addRoofSolid(0, 5.86, 0, 4.12, 2.06, 0.40, 0x2d7d73, 5, 0.92);
+      for (const y of [4.02, 4.88, 5.70]) {
+        const width = y < 4.5 ? 5.5 : y < 5.3 ? 4.6 : 3.5;
+        for (let i = 0; i < 11; i++) {
+          const x = -width / 2 + i * width / 10;
+          for (const z of [1.26, -1.26]) addBox(x, y, z, 0.15, 0.16, 0.14, 0xd8b06b, 6, 0.88, CORE_PULL[6]);
+        }
+      }
+
+      // Republican-era clock turret / alarm bell platform.
+      addBox(0, 6.48, 0, 1.55, 1.32, 1.55, 0x958f7d, 7, 0.82, CORE_PULL[7]);
+      addBox(0, 7.18, 0, 1.78, 0.18, 1.78, 0x23665f, 7, 0.86, CORE_PULL[7]);
+      addRoofSolid(0, 7.20, 0, 2.14, 1.78, 0.32, 0x2d7d73, 7, 0.92, CORE_PULL[7]);
+      addClockDialSolid(0, 6.50, 0.82, 7, CORE_PULL[7]);
+      addClockDialSolid(0.82, 6.50, 0, 7, CORE_PULL[7], 'right');
+      addClockDialSolid(-0.82, 6.50, 0, 7, CORE_PULL[7], 'left');
+      addBox(0, 7.62, 0, 0.26, 0.52, 0.26, 0xf0c85b, 7, 0.92, CORE_PULL[7]);
+      addLineMesh([[-0.42, 7.94, 0], [0.46, 7.94, 0]], 0xf0c85b, 7, CORE_PULL[7], 0.92);
+
+      // Plaques, drum, bell and exposed drive train for exploded view.
+      addBox(0, 1.84, 1.72, 1.22, 0.22, 0.08, 0xf0c85b, 8, 0.92, CORE_PULL[8]);
+      addBox(0, 3.94, 1.72, 1.48, 0.22, 0.08, 0xf0c85b, 8, 0.92, CORE_PULL[8]);
+      addBox(0, 5.02, 1.45, 1.08, 0.18, 0.08, 0xf0c85b, 8, 0.9, CORE_PULL[8]);
+      addCylinderDisk(-0.74, 3.08, 0.34, 0.54, 0.72, 0xb3422e, 9, 0.86, CORE_PULL[9]);
+      addTorus(-0.74, 3.08, 0.72, 0.52, 0.045, 0xf0c85b, 9, 0.92, CORE_PULL[9]);
+      addCylinderDisk(0.9, 3.34, 0.22, 0.36, 0.46, 0xf0c85b, 9, 0.9, CORE_PULL[9]);
+      for (const [x, y, r] of [[0.2, 3.8, 0.44], [-0.52, 3.28, 0.3], [0.78, 3.24, 0.28]]) {
+        const gear = addTorus(x, y, -0.78, r, 0.045, 0x9ee6ff, 9, 0.72, CORE_PULL[9]);
+        gear.userData.spin = (x < 0 ? -1 : 1) * (1.1 + r);
+      }
+
+      // Walking street context.
+      addBox(0, -0.52, -0.9, 9.5, 0.18, 2.1, 0x5b6470, 10, 0.44);
+      for (let i = 0; i < 12; i++) addBox(-4.6 + i * 0.84, 0.04 + (i % 3) * 0.12, -2.55 - (i % 4) * 0.2, 0.38, 0.7 + (i % 3) * 0.22, 0.08, 0x5f6d75, 10, 0.28);
+    }
+
+    function updateSolidModel(progress, time) {
+      solidPieces.forEach((piece) => {
+        const local = solidLocal(progress, piece.userData.moduleId || 0);
+        piece.position.lerpVectors(piece.userData.home, piece.userData.exploded, local);
+        if (piece.userData.spin) piece.rotation.z = time * piece.userData.spin * (0.2 + local * 1.8);
+      });
+      solidRoot.rotation.y = points.rotation.y;
+    }
+
+    // Keep the model in pure particle mode: no solid mesh relief or flat color blocks.
+    // buildSolidNingboModel();
+
+    const annotationData = [
+      { cn: '宁波鼓楼 / 海曙楼', en: 'Ningbo Gulou / Haishu Tower', p: [0 + MODULES[7].xOffset + CORE_PULL[7][0], 7.7 + MODULES[7].yOffset + CORE_PULL[7][1], 0.2 + MODULES[7].zOffset + CORE_PULL[7][2]], side: 'right', slot: 0 },
+      { cn: '砖石城台', en: 'Brick city-gate platform', p: [-2.8 + MODULES[1].xOffset, 1.2 + MODULES[1].yOffset, 1.4 + MODULES[1].zOffset], side: 'left', slot: 0 },
+      { cn: '拱形门洞', en: 'Arched gateway passage', p: [0 + MODULES[2].xOffset + CORE_PULL[2][0], 1.18 + MODULES[2].yOffset + CORE_PULL[2][1], 1.66 + MODULES[2].zOffset + CORE_PULL[2][2]], side: 'left', slot: 1 },
+      { cn: '登楼台阶', en: 'Northeast stair access', p: [-3.0 + MODULES[3].xOffset, 1.4 + MODULES[3].yOffset, 1.7 + MODULES[3].zOffset], side: 'left', slot: 2 },
+      { cn: '五开间木构楼身', en: 'Five-bay timber pavilion', p: [2.25 + MODULES[4].xOffset, 3.55 + MODULES[4].yOffset, 1.25 + MODULES[4].zOffset], side: 'right', slot: 1 },
+      { cn: '三重檐歇山顶', en: 'Triple hip-and-gable eaves', p: [1.2 + MODULES[5].xOffset, 5.35 + MODULES[5].yOffset, 1.0 + MODULES[5].zOffset], side: 'right', slot: 2 },
+      { cn: '斗栱与檐下构件', en: 'Bracket sets under eaves', p: [1.8 + MODULES[6].xOffset + CORE_PULL[6][0], 4.0 + MODULES[6].yOffset + CORE_PULL[6][1], 1.32 + MODULES[6].zOffset + CORE_PULL[6][2]], side: 'right', slot: 3 },
+      { cn: '顶部钟楼 / 警钟台', en: 'Clock turret / alarm bell platform', p: [0 + MODULES[7].xOffset + CORE_PULL[7][0], 6.6 + MODULES[7].yOffset + CORE_PULL[7][1], 0.9 + MODULES[7].zOffset + CORE_PULL[7][2]], side: 'right', slot: 4 },
+      { cn: '匾额与报时功能', en: 'Plaques and timekeeping', p: [0 + MODULES[8].xOffset + CORE_PULL[8][0], 3.95 + MODULES[8].yOffset + CORE_PULL[8][1], 1.68 + MODULES[8].zOffset + CORE_PULL[8][2]], side: 'left', slot: 3 },
+      { cn: '内部鼓钟', en: 'Drum and bell core', p: [-0.72 + MODULES[9].xOffset + CORE_PULL[9][0], 3.12 + MODULES[9].yOffset + CORE_PULL[9][1], 0.42 + MODULES[9].zOffset + CORE_PULL[9][2]], side: 'right', slot: 5 },
+      { cn: '传动齿轮', en: 'Clockwork drive train', p: [0.2 + MODULES[9].xOffset + CORE_PULL[9][0], 3.8 + MODULES[9].yOffset + CORE_PULL[9][1], -0.72 + MODULES[9].zOffset + CORE_PULL[9][2]], side: 'right', slot: 6 },
+      { cn: '鼓楼步行街', en: 'Gulou pedestrian street', p: [-3.2 + MODULES[10].xOffset, -0.55 + MODULES[10].yOffset, -1.2 + MODULES[10].zOffset], side: 'left', slot: 4 },
+      { cn: '始建 821 年', en: 'Founded in Tang dynasty, 821', p: [2.7 + MODULES[1].xOffset, 0.25 + MODULES[1].yOffset, -0.1 + MODULES[1].zOffset], side: 'left', slot: 5 },
+      { cn: '清咸丰格局', en: 'Qing-era rebuild massing', p: [2.35 + MODULES[5].xOffset, 5.0 + MODULES[5].yOffset, -1.0 + MODULES[5].zOffset], side: 'right', slot: 7 }
+    ];
+
+    const labels = annotationData.map((item) => {
+      const el = document.createElement('div');
+      el.className = `annotation-label ${item.side === 'left' ? 'left' : 'right'}`;
+      el.innerHTML = `<span class="cn">${item.cn}</span><span class="en">${item.en}</span>`;
+      labelRenderer.domElement.appendChild(el);
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('r', '2.2');
+      leaderSvg.appendChild(line);
+      leaderSvg.appendChild(dot);
+      return { ...item, el, line, dot, world: new THREE.Vector3(item.p[0], item.p[1], item.p[2]) };
+    });
+
+    function updateAnnotations(alpha) {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const view = new THREE.Vector3();
+      leaderSvg.setAttribute('width', String(w));
+      leaderSvg.setAttribute('height', String(h));
+      leaderSvg.style.opacity = String(alpha);
+
+      labels.forEach((label) => {
+        view.copy(label.world).project(camera);
+        const x = (view.x * 0.5 + 0.5) * w;
+        const y = (-view.y * 0.5 + 0.5) * h;
+        const labelW = w < 680 ? 118 : Math.min(238, Math.max(164, Math.round(w * 0.15)));
+        const sidePad = w < 680 ? 8 : 28;
+        const tx = label.side === 'left' ? sidePad : w - labelW - sidePad;
+        const slotCount = label.side === 'left' ? 7 : 9;
+        const topPad = h < 760 ? 18 : 24;
+        const bottomPad = h < 760 ? 54 : 72;
+        const row = slotCount <= 1 ? 0 : label.slot / (slotCount - 1);
+        const ty = topPad + row * Math.max(1, h - topPad - bottomPad);
+        const endX = label.side === 'left' ? tx + labelW : tx;
+        const endY = ty + 19;
+
+        label.el.style.width = `${labelW}px`;
+        label.el.style.opacity = String(alpha);
+        label.el.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
+        label.line.setAttribute('x1', x.toFixed(1));
+        label.line.setAttribute('y1', y.toFixed(1));
+        label.line.setAttribute('x2', endX.toFixed(1));
+        label.line.setAttribute('y2', endY.toFixed(1));
+        label.dot.setAttribute('cx', x.toFixed(1));
+        label.dot.setAttribute('cy', y.toFixed(1));
+      });
+    }
+
+    function timeline(t) {
+      const cycle = 16.8;
+      const p = (t % cycle) / cycle;
+      let progress = 0;
+      let labelAlpha = 0;
+      let hold = false;
+
+      if (p < 0.15) {
+        progress = 0;
+      } else if (p < 0.43) {
+        progress = smooth01((p - 0.15) / 0.28);
+      } else if (p < 0.72) {
+        progress = 1;
+        hold = true;
+        labelAlpha = smooth01(Math.min((p - 0.43) / 0.055, (0.72 - p) / 0.055));
+      } else if (p < 0.94) {
+        progress = 1 - smooth01((p - 0.72) / 0.22);
+      } else {
+        progress = 0;
+      }
+      return { progress, labelAlpha, hold };
+    }
+
+    function resize() {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const dpr = Math.min(window.devicePixelRatio || 1, DPR_LIMIT);
+      renderer.setPixelRatio(dpr);
+      renderer.setSize(w, h, false);
+      composer.setPixelRatio(dpr);
+      composer.setSize(w, h);
+      labelRenderer.setSize(w, h);
+      bloomPass.setSize(w * dpr, h * dpr);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      material.uniforms.uDpr.value = dpr;
+    }
+
+    window.addEventListener('resize', resize, { passive: true });
+    resize();
+
+    const start = performance.now();
+    function animate(now) {
+      const t = (now - start) * 0.001;
+      const state = timeline(t);
+      material.uniforms.uTime.value = t;
+      material.uniforms.uProgress.value = state.progress;
+      controls.autoRotateSpeed = state.hold ? 0.06 : 0.34;
+      points.rotation.y = Math.sin(t * 0.06) * 0.018;
+      if (solidPieces.length) updateSolidModel(state.progress, t);
+      controls.update();
+      updateAnnotations(state.labelAlpha);
+      composer.render();
+      labelRenderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
