@@ -1,0 +1,1245 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:," />
+  <title>Gothic Revival Clocktower Exploded Diagram</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 44%, #10213a 0%, #050c18 46%, #010208 100%);
+      font-family: Georgia, "Times New Roman", "Noto Serif SC", serif;
+    }
+
+    #stage {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 50% 45%, rgba(255,255,255,0.035), transparent 26%),
+        radial-gradient(circle at 50% 50%, transparent 44%, rgba(0,0,0,0.62) 100%);
+    }
+
+    .label-layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      font-variant-numeric: lining-nums;
+    }
+
+    .annotation-label {
+      position: absolute;
+      min-width: 164px;
+      max-width: 238px;
+      padding: 7px 9px 8px;
+      border-left: 1px solid rgba(185, 232, 255, 0.48);
+      background: linear-gradient(90deg, rgba(6, 18, 31, 0.78), rgba(6, 18, 31, 0.18));
+      color: rgba(235, 249, 255, 0.94);
+      text-shadow: 0 0 12px rgba(170, 230, 255, 0.38);
+      letter-spacing: 0;
+      transform: translate3d(0, 0, 0);
+      will-change: opacity, transform;
+    }
+
+    .annotation-label.left {
+      border-left: none;
+      border-right: 1px solid rgba(185, 232, 255, 0.48);
+      text-align: right;
+      background: linear-gradient(270deg, rgba(6, 18, 31, 0.78), rgba(6, 18, 31, 0.18));
+    }
+
+    .annotation-label .cn {
+      display: block;
+      font-size: 14px;
+      line-height: 1.1;
+      color: rgba(255, 247, 218, 0.96);
+    }
+
+    .annotation-label .en {
+      display: block;
+      margin-top: 3px;
+      font-size: 11px;
+      line-height: 1.1;
+      color: rgba(156, 214, 238, 0.82);
+      font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    .annotation-line {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .annotation-line line {
+      stroke: rgba(153, 217, 242, 0.5);
+      stroke-width: 1;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .annotation-line circle {
+      fill: rgba(226, 244, 255, 0.78);
+    }
+
+    @media (max-width: 680px) {
+      .annotation-label {
+        min-width: 108px;
+        max-width: 128px;
+        padding: 5px 6px 6px;
+      }
+
+      .annotation-label .cn {
+        font-size: 11px;
+      }
+
+      .annotation-label .en {
+        font-size: 9px;
+      }
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <div class="vignette"></div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
+
+    const TAU = Math.PI * 2;
+    const DPR_LIMIT = 2;
+    const MIN_Y = 0;
+    const MAX_Y = 20.2;
+    const CLOCK_Y = 12.5;
+    const CLOCK_RADIUS = 0.76;
+    const CLOCK_HALF = 1.42;
+    const TARGET_PARTICLES = 113000;
+
+    const MODULES = [
+      { id: 0, cn: '环境微粒', en: 'Atmospheric Particles', yOffset: 0.0, delay: 0.0 },
+      { id: 1, cn: '基座', en: 'Plinth', yOffset: -0.12, delay: 0.00 },
+      { id: 2, cn: '塔身', en: 'Shaft', yOffset: 0.70, delay: 0.015 },
+      { id: 3, cn: '拱窗层', en: 'Lancet Stage', yOffset: 1.38, delay: 0.030 },
+      { id: 4, cn: '钟机室', en: 'Clock-Movement Room', yOffset: 2.05, delay: 0.045 },
+      { id: 5, cn: '钟面层', en: 'Clock-Face Stage', yOffset: 2.72, delay: 0.060 },
+      { id: 6, cn: '钟室', en: 'Belfry / Bell-Chamber', yOffset: 3.40, delay: 0.075 },
+      { id: 7, cn: '檐口栏杆', en: 'Cornice & Balustrade', yOffset: 4.08, delay: 0.088 },
+      { id: 8, cn: '尖顶', en: 'Spire', yOffset: 4.72, delay: 0.102 },
+      { id: 9, cn: '顶饰', en: 'Finial', yOffset: 5.25, delay: 0.115 }
+    ];
+
+    const CORE_PULL = {
+      2: [3.9, 0.18, 1.85],
+      4: [4.75, 0.08, 2.1],
+      5: [4.35, 0.06, 1.95],
+      6: [4.55, 0.05, 2.05]
+    };
+
+    const canvas = document.getElementById('stage');
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      alpha: true,
+      powerPreference: 'high-performance'
+    });
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.9;
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x020814, 0.018);
+
+    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 96);
+    camera.position.set(8.8, 12.0, 38.2);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(1.2, 12.0, 0);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.055;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.5;
+    controls.minDistance = 22;
+    controls.maxDistance = 60;
+    controls.minPolarAngle = Math.PI * 0.16;
+    controls.maxPolarAngle = Math.PI * 0.62;
+
+    const labelRenderer = new CSS2DRenderer();
+    labelRenderer.domElement.className = 'label-layer';
+    labelRenderer.domElement.style.position = 'fixed';
+    labelRenderer.domElement.style.inset = '0';
+    labelRenderer.domElement.style.pointerEvents = 'none';
+    document.body.appendChild(labelRenderer.domElement);
+
+    const leaderSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    leaderSvg.classList.add('annotation-line');
+    labelRenderer.domElement.appendChild(leaderSvg);
+
+    const renderPass = new RenderPass(scene, camera);
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.66, 0.5, 0.16);
+    const composer = new EffectComposer(renderer);
+    composer.addPass(renderPass);
+    composer.addPass(bloomPass);
+
+    function mulberry32(seed) {
+      return function rand() {
+        let t = seed += 0x6D2B79F5;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    const rand = mulberry32(0xB311F7);
+
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    function clamp01(t) {
+      return Math.max(0, Math.min(1, t));
+    }
+
+    function smooth01(t) {
+      t = clamp01(t);
+      return t * t * (3 - 2 * t);
+    }
+
+    function jitter(amount) {
+      return (rand() - 0.5) * amount;
+    }
+
+    function moduleMeta(moduleId) {
+      return MODULES[moduleId] || MODULES[0];
+    }
+
+    const home = [];
+    const exploded = [];
+    const moduleIds = [];
+    const coreFlags = [];
+    const delays = [];
+    const seeds = [];
+    const sizes = [];
+    const clockHandParticles = [];
+
+    function explodedFor(x, y, z, moduleId, coreFlag, seed) {
+      const meta = moduleMeta(moduleId);
+      let ex = x;
+      let ey = y + meta.yOffset;
+      let ez = z;
+
+      if (moduleId > 0) {
+        const phase = seed * TAU;
+        ex += Math.sin(phase) * 0.018;
+        ez += Math.cos(phase * 0.7) * 0.018;
+      }
+
+      if (coreFlag > 0.5) {
+        const pull = CORE_PULL[moduleId] || [4.1, 0.1, 1.85];
+        ex += pull[0];
+        ey += pull[1];
+        ez += pull[2];
+      }
+
+      if (moduleId === 0) {
+        ex = x + Math.sin(seed * TAU) * 0.45;
+        ey = y + Math.cos(seed * 9.0) * 0.12;
+        ez = z + Math.cos(seed * TAU) * 0.45;
+      }
+
+      return [ex, ey, ez];
+    }
+
+    function addParticle(x, y, z, moduleId, coreFlag = 0, size = 1.85, seed = rand()) {
+      const idx = home.length / 3;
+      const e = explodedFor(x, y, z, moduleId, coreFlag, seed);
+      home.push(x, y, z);
+      exploded.push(e[0], e[1], e[2]);
+      moduleIds.push(moduleId);
+      coreFlags.push(coreFlag);
+      delays.push(moduleMeta(moduleId).delay + (coreFlag > 0.5 ? 0.018 : 0));
+      seeds.push(seed);
+      sizes.push(size);
+      return idx;
+    }
+
+    function sampleLine(a, b, count, moduleId, coreFlag = 0, size = 1.9, noise = 0.012) {
+      for (let i = 0; i < count; i++) {
+        const t = rand();
+        addParticle(
+          lerp(a[0], b[0], t) + jitter(noise),
+          lerp(a[1], b[1], t) + jitter(noise),
+          lerp(a[2], b[2], t) + jitter(noise),
+          moduleId,
+          coreFlag,
+          size
+        );
+      }
+    }
+
+    function sampleBoxSurface(count, hx, hz, y0, y1, moduleId, coreFlag = 0, options = {}) {
+      const cx = options.cx || 0;
+      const cz = options.cz || 0;
+      const includeTop = options.includeTop !== false;
+      const includeBottom = options.includeBottom === true;
+      const skip = options.skip;
+      const size = options.size || 1.85;
+      const areaFront = hx * 2 * (y1 - y0);
+      const areaSide = hz * 2 * (y1 - y0);
+      const areaTop = hx * 2 * hz * 2;
+      const total = areaFront * 2 + areaSide * 2 + (includeTop ? areaTop : 0) + (includeBottom ? areaTop : 0);
+      let made = 0;
+      let guard = 0;
+
+      while (made < count && guard < count * 18) {
+        guard++;
+        let pick = rand() * total;
+        let x = 0;
+        let y = 0;
+        let z = 0;
+        let face = 0;
+        if (pick < areaFront) {
+          face = 0;
+          x = (rand() * 2 - 1) * hx;
+          y = lerp(y0, y1, rand());
+          z = hz;
+        } else if ((pick -= areaFront) < areaFront) {
+          face = 2;
+          x = (rand() * 2 - 1) * hx;
+          y = lerp(y0, y1, rand());
+          z = -hz;
+        } else if ((pick -= areaFront) < areaSide) {
+          face = 1;
+          x = hx;
+          y = lerp(y0, y1, rand());
+          z = (rand() * 2 - 1) * hz;
+        } else if ((pick -= areaSide) < areaSide) {
+          face = 3;
+          x = -hx;
+          y = lerp(y0, y1, rand());
+          z = (rand() * 2 - 1) * hz;
+        } else if ((pick -= areaSide) < areaTop && includeTop) {
+          face = 4;
+          x = (rand() * 2 - 1) * hx;
+          y = y1;
+          z = (rand() * 2 - 1) * hz;
+        } else {
+          face = 5;
+          x = (rand() * 2 - 1) * hx;
+          y = y0;
+          z = (rand() * 2 - 1) * hz;
+        }
+
+        if (!skip || !skip(face, x, y, z)) {
+          addParticle(cx + x + jitter(0.014), y + jitter(0.014), cz + z + jitter(0.014), moduleId, coreFlag, size);
+          made++;
+        }
+      }
+    }
+
+    function sampleTaperedBoxSides(count, y0, y1, hx0, hz0, hx1, hz1, moduleId, coreFlag = 0, options = {}) {
+      const skip = options.skip;
+      const size = options.size || 1.85;
+      let made = 0;
+      let guard = 0;
+      while (made < count && guard < count * 16) {
+        guard++;
+        const face = Math.floor(rand() * 4);
+        const t = rand();
+        const y = lerp(y0, y1, t);
+        const hx = lerp(hx0, hx1, t);
+        const hz = lerp(hz0, hz1, t);
+        let x = 0;
+        let z = 0;
+        let u = 0;
+        if (face === 0) {
+          u = (rand() * 2 - 1) * hx;
+          x = u;
+          z = hz;
+        } else if (face === 2) {
+          u = (rand() * 2 - 1) * hx;
+          x = u;
+          z = -hz;
+        } else if (face === 1) {
+          u = (rand() * 2 - 1) * hz;
+          x = hx;
+          z = u;
+        } else {
+          u = (rand() * 2 - 1) * hz;
+          x = -hx;
+          z = u;
+        }
+        if (!skip || !skip(face, u, y, hx, hz)) {
+          addParticle(x + jitter(0.014), y + jitter(0.014), z + jitter(0.014), moduleId, coreFlag, size);
+          made++;
+        }
+      }
+    }
+
+    function sampleOctCone(count, cx, cz, radiusBase, radiusTop, y0, y1, moduleId, coreFlag = 0, size = 1.9) {
+      for (let i = 0; i < count; i++) {
+        const side = Math.floor(rand() * 8);
+        const a0 = side * TAU / 8 + Math.PI / 8;
+        const a1 = (side + 1) * TAU / 8 + Math.PI / 8;
+        const v = rand();
+        const t = rand();
+        const r = lerp(radiusBase, radiusTop, v);
+        const x = cx + r * lerp(Math.cos(a0), Math.cos(a1), t);
+        const z = cz + r * lerp(Math.sin(a0), Math.sin(a1), t);
+        const y = lerp(y0, y1, v);
+        addParticle(x + jitter(0.01), y + jitter(0.01), z + jitter(0.01), moduleId, coreFlag, size);
+      }
+    }
+
+    function sampleSphereSurface(count, cx, cy, cz, radius, moduleId, coreFlag = 0, size = 2.0) {
+      for (let i = 0; i < count; i++) {
+        const a = rand() * TAU;
+        const v = rand() * 2 - 1;
+        const s = Math.sqrt(1 - v * v);
+        addParticle(
+          cx + Math.cos(a) * s * radius,
+          cy + v * radius,
+          cz + Math.sin(a) * s * radius,
+          moduleId,
+          coreFlag,
+          size
+        );
+      }
+    }
+
+    function sampleRingXY(cx, cy, cz, radius, count, moduleId, coreFlag = 0, size = 2.0, thickness = 0.018) {
+      for (let i = 0; i < count; i++) {
+        const a = rand() * TAU;
+        const r = radius + jitter(thickness);
+        addParticle(cx + Math.cos(a) * r, cy + Math.sin(a) * r, cz + jitter(0.01), moduleId, coreFlag, size);
+      }
+    }
+
+    function sampleDiskXY(cx, cy, cz, radius, count, moduleId, coreFlag = 0, size = 1.8) {
+      for (let i = 0; i < count; i++) {
+        const a = rand() * TAU;
+        const r = Math.sqrt(rand()) * radius;
+        addParticle(cx + Math.cos(a) * r, cy + Math.sin(a) * r, cz + jitter(0.015), moduleId, coreFlag, size);
+      }
+    }
+
+    function isLancetVoid(u, y) {
+      const centers = [-0.52, 0, 0.52];
+      const bottom = 7.62;
+      const shoulder = 9.02;
+      const top = 9.92;
+      for (const c of centers) {
+        const dx = Math.abs(u - c);
+        if (y >= bottom && y <= shoulder && dx < 0.17) return true;
+        if (y > shoulder && y <= top) {
+          const limit = 0.17 * (1 - (y - shoulder) / (top - shoulder));
+          if (dx < limit) return true;
+        }
+      }
+      return false;
+    }
+
+    function mapFace(face, u, y, half, offset = 0.045) {
+      if (face === 0) return [u, y, half + offset];
+      if (face === 1) return [half + offset, y, -u];
+      if (face === 2) return [-u, y, -half - offset];
+      return [-half - offset, y, u];
+    }
+
+    function sampleFaceLine(face, u0, y0, u1, y1, half, count, moduleId, coreFlag = 0, size = 1.9, offset = 0.052) {
+      const a = mapFace(face, u0, y0, half, offset);
+      const b = mapFace(face, u1, y1, half, offset);
+      sampleLine(a, b, count, moduleId, coreFlag, size, 0.009);
+    }
+
+    function addLancet(face, u, half) {
+      const bottom = 7.57;
+      const shoulder = 9.02;
+      const top = 9.92;
+      const w = 0.2;
+      sampleFaceLine(face, u - w, bottom, u - w, shoulder, half, 100, 3, 0, 2.05);
+      sampleFaceLine(face, u + w, bottom, u + w, shoulder, half, 100, 3, 0, 2.05);
+      sampleFaceLine(face, u - w, shoulder, u, top, half, 115, 3, 0, 2.1);
+      sampleFaceLine(face, u + w, shoulder, u, top, half, 115, 3, 0, 2.1);
+      sampleFaceLine(face, u, bottom + 0.16, u, shoulder - 0.1, half, 90, 3, 0, 1.95);
+      sampleFaceLine(face, u - 0.10, shoulder - 0.06, u + 0.10, shoulder - 0.06, half, 48, 3, 0, 1.8);
+      sampleFaceLine(face, u - 0.27, bottom - 0.08, u + 0.27, bottom - 0.08, half, 64, 3, 0, 1.9);
+    }
+
+    function drawClockCanvas(includeHands = true, onlyHands = false, now = new Date()) {
+      const c = document.createElement('canvas');
+      c.width = 512;
+      c.height = 512;
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.save();
+      ctx.translate(256, 256);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      if (!onlyHands) {
+        ctx.strokeStyle = 'rgba(250,246,225,0.95)';
+        ctx.lineWidth = 13;
+        ctx.beginPath();
+        ctx.arc(0, 0, 207, 0, TAU);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(169,225,244,0.72)';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, 182, 0, TAU);
+        ctx.stroke();
+
+        for (let i = 0; i < 60; i++) {
+          const a = i * TAU / 60;
+          const major = i % 5 === 0;
+          const r0 = major ? 173 : 190;
+          const r1 = 201;
+          ctx.strokeStyle = major ? 'rgba(255,248,222,0.92)' : 'rgba(169,225,244,0.58)';
+          ctx.lineWidth = major ? 5 : 2;
+          ctx.beginPath();
+          ctx.moveTo(Math.sin(a) * r0, -Math.cos(a) * r0);
+          ctx.lineTo(Math.sin(a) * r1, -Math.cos(a) * r1);
+          ctx.stroke();
+        }
+
+        const romans = ['XII', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'];
+        ctx.fillStyle = 'rgba(255,250,232,0.96)';
+        ctx.font = '700 42px Georgia, Times New Roman, serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (let i = 0; i < 12; i++) {
+          const a = i * TAU / 12;
+          ctx.fillText(romans[i], Math.sin(a) * 137, -Math.cos(a) * 137 + 2);
+        }
+      }
+
+      if (includeHands) {
+        const seconds = now.getSeconds() + now.getMilliseconds() / 1000;
+        const minutes = now.getMinutes() + seconds / 60;
+        const hours = (now.getHours() % 12) + minutes / 60;
+        const minuteA = minutes * TAU / 60;
+        const hourA = hours * TAU / 12;
+
+        ctx.strokeStyle = 'rgba(255,250,226,1)';
+        ctx.lineWidth = 14;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.sin(hourA) * 82, -Math.cos(hourA) * 82);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(192,244,255,0.98)';
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.sin(minuteA) * 140, -Math.cos(minuteA) * 140);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(255,255,244,1)';
+        ctx.beginPath();
+        ctx.arc(0, 0, 13, 0, TAU);
+        ctx.fill();
+      }
+
+      ctx.restore();
+      return c;
+    }
+
+    function brightPixels(sourceCanvas, threshold = 22) {
+      const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+      const img = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+      const pixels = [];
+      for (let y = 0; y < sourceCanvas.height; y += 2) {
+        for (let x = 0; x < sourceCanvas.width; x += 2) {
+          const i = (y * sourceCanvas.width + x) * 4;
+          const a = img.data[i + 3];
+          const luma = (img.data[i] + img.data[i + 1] + img.data[i + 2]) / 3;
+          if (a > threshold && luma > 18) pixels.push([x, y, a / 255]);
+        }
+      }
+      return pixels;
+    }
+
+    function sampleClockPixel(pixels, seed) {
+      const p = pixels[Math.min(pixels.length - 1, Math.floor(seed * pixels.length))];
+      const sx = (seed * 913.37) % 1 - 0.5;
+      const sy = (seed * 427.91) % 1 - 0.5;
+      const u = (((p[0] + sx) / 512) - 0.5) * 2 * CLOCK_RADIUS;
+      const y = CLOCK_Y + (0.5 - ((p[1] + sy) / 512)) * 2 * CLOCK_RADIUS;
+      return [u, y];
+    }
+
+    function addClockFaceParticles() {
+      const staticPixels = brightPixels(drawClockCanvas(false, false), 18);
+      const handPixels = brightPixels(drawClockCanvas(true, true), 18);
+      for (let face = 0; face < 4; face++) {
+        for (let i = 0; i < 1350; i++) {
+          const seed = rand();
+          const [u, y] = sampleClockPixel(staticPixels, seed);
+          const p = mapFace(face, u, y, CLOCK_HALF, 0.072);
+          addParticle(p[0], p[1], p[2], 5, 0, 2.26, seed);
+        }
+        for (let i = 0; i < 420; i++) {
+          const seed = rand();
+          const [u, y] = sampleClockPixel(handPixels, seed);
+          const p = mapFace(face, u, y, CLOCK_HALF, 0.08);
+          const idx = addParticle(p[0], p[1], p[2], 5, 0, 2.46, seed);
+          clockHandParticles.push({ idx, face, seed });
+        }
+      }
+    }
+
+    function addBase() {
+      sampleBoxSurface(2200, 3.08, 3.08, 0.00, 0.22, 1, 0, { size: 1.7 });
+      sampleBoxSurface(2450, 2.66, 2.66, 0.22, 0.48, 1, 0, { size: 1.72 });
+      sampleBoxSurface(2650, 2.26, 2.26, 0.48, 0.78, 1, 0, { size: 1.78 });
+      sampleBoxSurface(2600, 1.92, 1.92, 0.78, 1.12, 1, 0, { size: 1.85 });
+      for (const y of [0.22, 0.48, 0.78, 1.12]) {
+        const h = y < 0.3 ? 3.08 : y < 0.55 ? 2.66 : y < 0.9 ? 2.26 : 1.92;
+        sampleLine([-h, y, h], [h, y, h], 90, 1, 0, 1.65);
+        sampleLine([-h, y, -h], [h, y, -h], 90, 1, 0, 1.65);
+        sampleLine([h, y, -h], [h, y, h], 90, 1, 0, 1.65);
+        sampleLine([-h, y, -h], [-h, y, h], 90, 1, 0, 1.65);
+      }
+    }
+
+    function addShaft() {
+      sampleTaperedBoxSides(11800, 1.12, 7.38, 1.36, 1.36, 1.20, 1.20, 2, 0, { size: 1.86 });
+      for (const u of [-0.72, 0.72]) {
+        sampleBoxSurface(760, 0.045, 0.055, 1.14, 7.42, 2, 0, { cx: u, cz: 1.41, size: 1.98 });
+        sampleBoxSurface(760, 0.045, 0.055, 1.14, 7.42, 2, 0, { cx: u, cz: -1.41, size: 1.98 });
+        sampleBoxSurface(760, 0.055, 0.045, 1.14, 7.42, 2, 0, { cx: 1.41, cz: u, size: 1.98 });
+        sampleBoxSurface(760, 0.055, 0.045, 1.14, 7.42, 2, 0, { cx: -1.41, cz: u, size: 1.98 });
+      }
+
+      for (const sx of [-1, 1]) {
+        for (const sz of [-1, 1]) {
+          const cx = sx * 1.49;
+          const cz = sz * 1.49;
+          sampleBoxSurface(760, 0.12, 0.12, 1.08, 7.44, 2, 0, { cx, cz, size: 1.95 });
+          sampleBoxSurface(250, 0.18, 0.18, 1.12, 1.42, 2, 0, { cx, cz, size: 1.9 });
+          sampleBoxSurface(250, 0.16, 0.16, 3.25, 3.48, 2, 0, { cx, cz, size: 1.9 });
+          sampleBoxSurface(250, 0.135, 0.135, 5.35, 5.56, 2, 0, { cx, cz, size: 1.9 });
+        }
+      }
+
+      for (let i = 0; i < 3200; i++) {
+        const t = rand();
+        const a = t * TAU * 4.9;
+        const r = 0.38;
+        const y = 1.34 + t * 5.72;
+        addParticle(Math.cos(a) * r, y, Math.sin(a) * r, 2, 1, 1.8);
+      }
+      for (let i = 0; i < 18; i++) {
+        const t0 = i / 18;
+        const t1 = (i + 0.5) / 18;
+        const a0 = t0 * TAU * 4.9;
+        const a1 = t1 * TAU * 4.9;
+        sampleLine([Math.cos(a0) * 0.38, 1.34 + t0 * 5.72, Math.sin(a0) * 0.38], [Math.cos(a1) * 0.38, 1.34 + t1 * 5.72, Math.sin(a1) * 0.38], 90, 2, 1, 1.75);
+      }
+      for (const x of [-0.62, 0.62]) {
+        sampleLine([x, 1.35, -0.28], [x, 7.02, -0.28], 420, 2, 1, 1.82);
+        sampleLine([x + 0.16, 1.35, -0.28], [x + 0.16, 7.02, -0.28], 420, 2, 1, 1.82);
+        sampleBoxSurface(620, 0.13, 0.13, 2.2, 2.9, 2, 1, { cx: x + 0.08, cz: -0.28, size: 2.0 });
+        sampleBoxSurface(620, 0.13, 0.13, 5.0, 5.7, 2, 1, { cx: x + 0.08, cz: -0.28, size: 2.0 });
+      }
+    }
+
+    function addLancetStage() {
+      sampleTaperedBoxSides(9000, 7.34, 10.18, 1.26, 1.26, 1.18, 1.18, 3, 0, {
+        size: 1.85,
+        skip: (face, u, y) => isLancetVoid(u, y)
+      });
+      for (let face = 0; face < 4; face++) {
+        addLancet(face, -0.52, 1.29);
+        addLancet(face, 0, 1.29);
+        addLancet(face, 0.52, 1.29);
+      }
+      sampleBoxSurface(1600, 1.36, 1.36, 10.08, 10.32, 3, 0, { size: 1.95 });
+    }
+
+    function addGear(cx, cy, cz, radius, teeth, moduleId, size = 2.05) {
+      for (let i = 0; i < 780; i++) {
+        const a = rand() * TAU;
+        const tooth = Math.floor(a / TAU * teeth * 2) % 2;
+        const r = radius * (tooth ? 1.08 : 0.94) + jitter(0.018);
+        addParticle(cx + Math.cos(a) * r, cy + Math.sin(a) * r, cz + jitter(0.012), moduleId, 1, size);
+      }
+      sampleRingXY(cx, cy, cz, radius * 0.42, 170, moduleId, 1, size * 0.94, 0.012);
+      for (let i = 0; i < 6; i++) {
+        const a = i * TAU / 6;
+        sampleLine([cx, cy, cz], [cx + Math.cos(a) * radius * 0.82, cy + Math.sin(a) * radius * 0.82, cz], 52, moduleId, 1, size * 0.88, 0.006);
+      }
+    }
+
+    function addClockMovementRoom() {
+      sampleBoxSurface(4200, 1.26, 1.26, 10.26, 11.58, 4, 0, {
+        size: 1.75,
+        skip: (face, x, y, z) => face < 4 && Math.abs(x) < 0.88 && y > 10.52 && y < 11.38
+      });
+      addGear(-0.46, 10.98, 0.25, 0.38, 24, 4, 2.08);
+      addGear(0.13, 11.18, 0.25, 0.28, 18, 4, 2.02);
+      addGear(0.54, 10.92, 0.25, 0.22, 14, 4, 2.0);
+      addGear(-0.44, 10.46, 0.18, 0.31, 20, 4, 2.0);
+      addGear(0.18, 10.42, 0.18, 0.23, 16, 4, 1.96);
+      addGear(0.70, 10.62, 0.18, 0.17, 12, 4, 1.92);
+      addGear(0.0, 11.5, 0.26, 0.16, 15, 4, 2.12);
+      sampleLine([-0.26, 11.34, 0.27], [-0.05, 11.18, 0.27], 80, 4, 1, 2.0);
+      sampleLine([0.27, 11.36, 0.27], [0.05, 11.18, 0.27], 80, 4, 1, 2.0);
+      sampleLine([0.0, 11.18, 0.27], [0.0, 10.0, 0.27], 320, 4, 1, 2.05);
+      sampleSphereSurface(640, 0.0, 9.72, 0.27, 0.24, 4, 1, 2.22);
+      sampleRingXY(-0.72, 10.58, 0.14, 0.24, 430, 4, 1, 2.05, 0.04);
+      sampleLine([-0.96, 10.58, 0.14], [-0.48, 10.58, 0.14], 80, 4, 1, 2.0);
+      sampleLine([-0.72, 10.34, 0.14], [-0.72, 10.82, 0.14], 80, 4, 1, 2.0);
+      for (const x of [-0.98, 0.98]) {
+        sampleLine([x, 10.15, -0.32], [x, 11.54, -0.32], 180, 4, 1, 1.86);
+        sampleLine([x, 10.15, 0.52], [x, 11.54, 0.52], 180, 4, 1, 1.86);
+      }
+    }
+
+    function addClockFaceStage() {
+      sampleBoxSurface(5200, 1.42, 1.42, 11.55, 13.24, 5, 0, {
+        size: 1.82,
+        skip: (face, x, y, z) => {
+          if (face > 3) return false;
+          const u = face === 0 || face === 2 ? x : z;
+          const dy = y - CLOCK_Y;
+          return u * u + dy * dy < CLOCK_RADIUS * CLOCK_RADIUS * 0.92;
+        }
+      });
+      addClockFaceParticles();
+      for (let face = 0; face < 4; face++) {
+        const r = CLOCK_RADIUS + 0.1;
+        for (let i = 0; i < 220; i++) {
+          const a = rand() * TAU;
+          const p = mapFace(face, Math.cos(a) * r, CLOCK_Y + Math.sin(a) * r, CLOCK_HALF, 0.068);
+          addParticle(p[0], p[1], p[2], 5, 0, 2.12);
+        }
+      }
+      sampleLine([0, CLOCK_Y, 0.18], [0, CLOCK_Y, 1.58], 240, 5, 1, 2.0);
+      addGear(0.0, CLOCK_Y, 0.2, 0.18, 18, 5, 2.0);
+      addGear(0.0, CLOCK_Y + 0.36, 0.18, 0.13, 12, 5, 1.96);
+      for (let i = 0; i < 4; i++) {
+        const a = i * TAU / 4;
+        const x = Math.cos(a) * 0.26;
+        const z = Math.sin(a) * 0.26;
+        sampleLine([0, CLOCK_Y, 0.18], [x, CLOCK_Y, z], 70, 5, 1, 1.9);
+      }
+    }
+
+    function addBell(cx, cy, cz, r, h, moduleId, size = 2.0) {
+      for (let i = 0; i < 1150; i++) {
+        const v = rand();
+        const a = rand() * TAU;
+        const rr = r * (0.38 + 0.72 * Math.pow(v, 0.72));
+        const y = cy + (v - 0.5) * h;
+        const flare = rr + Math.max(0, v - 0.68) * r * 0.55;
+        addParticle(cx + Math.cos(a) * flare, y, cz + Math.sin(a) * flare, moduleId, 1, size);
+      }
+      sampleLine([cx - r * 0.8, cy + h * 0.55, cz], [cx + r * 0.8, cy + h * 0.55, cz], 140, moduleId, 1, size);
+      sampleLine([cx + r * 0.72, cy + h * 0.20, cz], [cx + r * 1.08, cy + h * 0.04, cz], 80, moduleId, 1, size);
+    }
+
+    function addBelfry() {
+      sampleBoxSurface(4600, 1.32, 1.32, 13.18, 15.02, 6, 0, {
+        size: 1.75,
+        skip: (face, x, y, z) => face < 4 && Math.abs(face === 0 || face === 2 ? x : z) < 0.82 && y > 13.45 && y < 14.68
+      });
+      for (let face = 0; face < 4; face++) {
+        for (let j = 0; j < 7; j++) {
+          const y = 13.55 + j * 0.16;
+          sampleFaceLine(face, -0.76, y, 0.76, y + 0.11, 1.34, 82, 6, 0, 1.86, 0.058);
+        }
+      }
+      addBell(0, 14.2, 0.0, 0.52, 0.76, 6, 2.08);
+      for (const p of [[-0.58, 14.36, -0.42], [0.58, 14.36, -0.42], [-0.58, 14.36, 0.48], [0.58, 14.36, 0.48]]) {
+        addBell(p[0], p[1], p[2], 0.28, 0.46, 6, 1.94);
+      }
+      for (const x of [-0.72, 0, 0.72]) {
+        sampleLine([x - 0.32, 14.76, -0.22], [x + 0.32, 14.76, -0.22], 100, 6, 1, 2.0);
+      }
+      for (const x of [-0.58, 0.58]) {
+        sampleLine([x, 14.0, 0.0], [x + 0.42, 13.72, 0.24], 110, 6, 1, 1.95);
+        sampleLine([x + 0.42, 13.72, 0.24], [x + 0.42, 10.9, 0.24], 220, 6, 1, 1.72);
+      }
+      for (const sx of [-1, 1]) {
+        for (const sz of [-1, 1]) {
+          const cx = sx * 1.43;
+          const cz = sz * 1.43;
+          sampleBoxSurface(260, 0.1, 0.1, 13.12, 15.1, 6, 0, { cx, cz, size: 1.88 });
+          sampleOctCone(360, cx, cz, 0.2, 0.025, 15.1, 15.82, 6, 0, 1.98);
+        }
+      }
+    }
+
+    function addCorniceBalustrade() {
+      sampleBoxSurface(2700, 1.78, 1.78, 15.0, 15.28, 7, 0, { size: 2.0 });
+      sampleBoxSurface(2100, 2.0, 2.0, 15.24, 15.42, 7, 0, { size: 1.95 });
+      const half = 1.75;
+      for (let i = 0; i < 14; i++) {
+        const t = -1.52 + i * (3.04 / 13);
+        sampleBoxSurface(78, 0.035, 0.035, 15.42, 15.86, 7, 0, { cx: t, cz: half, size: 1.78 });
+        sampleBoxSurface(78, 0.035, 0.035, 15.42, 15.86, 7, 0, { cx: t, cz: -half, size: 1.78 });
+        sampleBoxSurface(78, 0.035, 0.035, 15.42, 15.86, 7, 0, { cx: half, cz: t, size: 1.78 });
+        sampleBoxSurface(78, 0.035, 0.035, 15.42, 15.86, 7, 0, { cx: -half, cz: t, size: 1.78 });
+      }
+      for (const sx of [-1, 1]) {
+        for (const sz of [-1, 1]) {
+          sampleLine([sx * 1.9, 15.25, sz * 1.9], [sx * 2.32, 15.02, sz * 2.32], 150, 7, 0, 2.0, 0.012);
+          sampleSphereSurface(120, sx * 2.35, 14.98, sz * 2.35, 0.08, 7, 0, 2.05);
+        }
+      }
+    }
+
+    function addSpire() {
+      sampleOctCone(10500, 0, 0, 1.18, 0.075, 15.82, 19.2, 8, 0, 1.9);
+      for (let i = 0; i < 8; i++) {
+        const a = i * TAU / 8 + Math.PI / 8;
+        sampleLine([Math.cos(a) * 1.19, 15.82, Math.sin(a) * 1.19], [Math.cos(a) * 0.08, 19.2, Math.sin(a) * 0.08], 260, 8, 0, 2.12, 0.008);
+        for (let k = 0; k < 7; k++) {
+          const y = 16.2 + k * 0.38;
+          const t = (y - 15.82) / (19.2 - 15.82);
+          const r = lerp(1.05, 0.18, t);
+          const x = Math.cos(a) * r;
+          const z = Math.sin(a) * r;
+          sampleLine([x, y, z], [x + Math.cos(a + 0.45) * 0.12, y + 0.12, z + Math.sin(a + 0.45) * 0.12], 35, 8, 0, 1.92, 0.006);
+        }
+      }
+      for (const face of [0, 2]) {
+        const y0 = 16.55;
+        const u = 0;
+        sampleFaceLine(face, u - 0.26, y0, u, y0 + 0.46, 0.74, 90, 8, 0, 2.0, 0.62);
+        sampleFaceLine(face, u + 0.26, y0, u, y0 + 0.46, 0.74, 90, 8, 0, 2.0, 0.62);
+        sampleFaceLine(face, u - 0.2, y0, u + 0.2, y0, 0.74, 70, 8, 0, 1.9, 0.62);
+      }
+    }
+
+    function addFinial() {
+      sampleSphereSurface(520, 0, 19.35, 0, 0.16, 9, 0, 2.25);
+      sampleLine([0, 19.45, 0], [0, 20.16, 0], 210, 9, 0, 2.12, 0.006);
+      sampleLine([-0.38, 19.86, 0], [0.46, 19.86, 0], 160, 9, 0, 2.1, 0.006);
+      sampleLine([0.24, 20.02, 0], [0.46, 19.86, 0], 60, 9, 0, 2.05, 0.006);
+      sampleLine([0.24, 19.70, 0], [0.46, 19.86, 0], 60, 9, 0, 2.05, 0.006);
+      sampleSphereSurface(180, 0, 20.18, 0, 0.045, 9, 0, 2.2);
+    }
+
+    function addAtmosphere() {
+      for (let i = 0; i < 5200; i++) {
+        const a = rand() * TAU;
+        const r = 4.8 + Math.pow(rand(), 0.55) * 15.5;
+        const y = rand() * 24.5 - 1.2;
+        addParticle(Math.cos(a) * r + jitter(1.0), y, Math.sin(a) * r + jitter(1.0), 0, 0, 1.08 + rand() * 0.6);
+      }
+    }
+
+    function compactParticles(target) {
+      const count = home.length / 3;
+      if (count <= target) return;
+      const protectedParticle = new Uint8Array(count);
+      for (const item of clockHandParticles) protectedParticle[item.idx] = 1;
+      let protectedCount = 0;
+      for (let i = 0; i < protectedParticle.length; i++) protectedCount += protectedParticle[i];
+      const keepChance = clamp01((target - protectedCount) / (count - protectedCount));
+      const remap = new Int32Array(count);
+      remap.fill(-1);
+      const nh = [];
+      const ne = [];
+      const nm = [];
+      const nc = [];
+      const nd = [];
+      const ns = [];
+      const nz = [];
+
+      for (let i = 0; i < count; i++) {
+        if (protectedParticle[i] || rand() < keepChance) {
+          remap[i] = nh.length / 3;
+          const j = i * 3;
+          nh.push(home[j], home[j + 1], home[j + 2]);
+          ne.push(exploded[j], exploded[j + 1], exploded[j + 2]);
+          nm.push(moduleIds[i]);
+          nc.push(coreFlags[i]);
+          nd.push(delays[i]);
+          ns.push(seeds[i]);
+          nz.push(sizes[i]);
+        }
+      }
+
+      home.length = 0;
+      exploded.length = 0;
+      moduleIds.length = 0;
+      coreFlags.length = 0;
+      delays.length = 0;
+      seeds.length = 0;
+      sizes.length = 0;
+      for (let i = 0; i < nh.length; i++) home.push(nh[i]);
+      for (let i = 0; i < ne.length; i++) exploded.push(ne[i]);
+      for (let i = 0; i < nm.length; i++) moduleIds.push(nm[i]);
+      for (let i = 0; i < nc.length; i++) coreFlags.push(nc[i]);
+      for (let i = 0; i < nd.length; i++) delays.push(nd[i]);
+      for (let i = 0; i < ns.length; i++) seeds.push(ns[i]);
+      for (let i = 0; i < nz.length; i++) sizes.push(nz[i]);
+      for (const item of clockHandParticles) item.idx = remap[item.idx];
+    }
+
+    addBase();
+    addShaft();
+    addLancetStage();
+    addClockMovementRoom();
+    addClockFaceStage();
+    addBelfry();
+    addCorniceBalustrade();
+    addSpire();
+    addFinial();
+    addAtmosphere();
+    compactParticles(TARGET_PARTICLES);
+
+    const positionArray = new Float32Array(home);
+    const explodedArray = new Float32Array(exploded);
+    const moduleArray = new Float32Array(moduleIds);
+    const coreArray = new Float32Array(coreFlags);
+    const delayArray = new Float32Array(delays);
+    const seedArray = new Float32Array(seeds);
+    const sizeArray = new Float32Array(sizes);
+
+    window.__clocktowerDiagnostics = {
+      particleCount: positionArray.length / 3,
+      drawCallParticleGeometries: 1,
+      modules: 9,
+      hasExplodedPositions: true,
+      hasCoreFlags: true
+    };
+
+    const geometry = new THREE.BufferGeometry();
+    const positionAttribute = new THREE.BufferAttribute(positionArray, 3);
+    positionAttribute.setUsage(THREE.DynamicDrawUsage);
+    geometry.setAttribute('position', positionAttribute);
+    geometry.setAttribute('aExploded', new THREE.BufferAttribute(explodedArray, 3));
+    geometry.setAttribute('aModule', new THREE.BufferAttribute(moduleArray, 1));
+    geometry.setAttribute('aCore', new THREE.BufferAttribute(coreArray, 1));
+    geometry.setAttribute('aDelay', new THREE.BufferAttribute(delayArray, 1));
+    geometry.setAttribute('aSeed', new THREE.BufferAttribute(seedArray, 1));
+    geometry.setAttribute('aSize', new THREE.BufferAttribute(sizeArray, 1));
+    geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(1.9, 11.4, 0.7), 33);
+
+    const material = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      uniforms: {
+        uTime: { value: 0 },
+        uProgress: { value: 0 },
+        uDpr: { value: Math.min(window.devicePixelRatio || 1, DPR_LIMIT) },
+        uMinY: { value: MIN_Y },
+        uMaxY: { value: MAX_Y }
+      },
+      vertexShader: `
+        attribute vec3 aExploded;
+        attribute float aModule;
+        attribute float aCore;
+        attribute float aDelay;
+        attribute float aSeed;
+        attribute float aSize;
+
+        uniform float uTime;
+        uniform float uProgress;
+        uniform float uDpr;
+        uniform float uMinY;
+        uniform float uMaxY;
+
+        varying float vY;
+        varying float vAlpha;
+        varying float vProgress;
+        varying float vCore;
+        varying float vModule;
+        varying float vFog;
+
+        float hash(vec3 p) {
+          p = fract(p * 0.3183099 + vec3(0.11, 0.17, 0.23));
+          p *= 17.0;
+          return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+        }
+
+        float noise(vec3 x) {
+          vec3 i = floor(x);
+          vec3 f = fract(x);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(
+            mix(
+              mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
+              mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x),
+              f.y
+            ),
+            mix(
+              mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
+              mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x),
+              f.y
+            ),
+            f.z
+          );
+        }
+
+        vec3 curlNoise(vec3 p) {
+          float e = 0.12;
+          float n1 = noise(p + vec3(0.0, e, 0.0));
+          float n2 = noise(p - vec3(0.0, e, 0.0));
+          float a = (n1 - n2) / (2.0 * e);
+          n1 = noise(p + vec3(0.0, 0.0, e));
+          n2 = noise(p - vec3(0.0, 0.0, e));
+          float b = (n1 - n2) / (2.0 * e);
+          n1 = noise(p + vec3(e, 0.0, 0.0));
+          n2 = noise(p - vec3(e, 0.0, 0.0));
+          float c = (n1 - n2) / (2.0 * e);
+          return normalize(vec3(a - b, b - c, c - a) + 0.0001);
+        }
+
+        float ease(float x) {
+          x = clamp(x, 0.0, 1.0);
+          return x * x * (3.0 - 2.0 * x);
+        }
+
+        void main() {
+          float local = ease((uProgress - aDelay) / max(0.001, 1.0 - aDelay));
+          if (aModule < 0.5) local = uProgress * 0.45;
+
+          vec3 p = mix(position, aExploded, local);
+          float transition = sin(local * 3.14159265);
+          vec3 c = curlNoise(position * 0.22 + vec3(aSeed * 7.0, uTime * 0.12, aModule * 0.37));
+          p += c * transition * mix(0.045, 0.22, aCore);
+
+          if (aModule < 0.5) {
+            float drift = sin(uTime * 0.12 + aSeed * 11.0);
+            p += c * (0.12 + 0.18 * drift);
+          }
+
+          vec4 mv = modelViewMatrix * vec4(p, 1.0);
+          gl_Position = projectionMatrix * mv;
+
+          float dist = max(0.001, -mv.z);
+          float size = aSize * mix(0.82, 0.78, local) * uDpr * (188.0 / dist);
+          gl_PointSize = clamp(size, 0.52, 4.2);
+
+          vY = clamp((position.y - uMinY) / (uMaxY - uMinY), 0.0, 1.0);
+          vProgress = local;
+          vCore = aCore;
+          vModule = aModule;
+          vFog = smoothstep(60.0, 10.0, length(mv.xyz));
+          vAlpha = mix(0.22, 0.18, local);
+          if (aModule < 0.5) vAlpha *= 0.22;
+          if (aCore > 0.5) vAlpha *= 1.05;
+        }
+      `,
+      fragmentShader: `
+        precision highp float;
+
+        varying float vY;
+        varying float vAlpha;
+        varying float vProgress;
+        varying float vCore;
+        varying float vModule;
+        varying float vFog;
+
+        void main() {
+          vec2 uv = gl_PointCoord - vec2(0.5);
+          float d = length(uv);
+          float core = smoothstep(0.5, 0.0, d);
+          float halo = smoothstep(0.5, 0.16, d) * 0.62;
+          float alpha = (core + halo) * vAlpha * vFog;
+          if (alpha < 0.012) discard;
+
+          vec3 gold = vec3(1.0, 0.63, 0.22);
+          vec3 stone = vec3(0.78, 0.83, 0.76);
+          vec3 cyan = vec3(0.63, 0.92, 1.0);
+          vec3 col = mix(gold, stone, smoothstep(0.06, 0.55, vY));
+          col = mix(col, cyan, smoothstep(0.45, 1.0, vY));
+
+          if (vCore > 0.5) {
+            vec3 mechanism = vec3(0.58, 0.94, 1.0);
+            vec3 brassHeat = vec3(1.0, 0.42, 0.26);
+            col = mix(mechanism, brassHeat, step(3.5, vModule) * step(vModule, 4.5) * 0.34);
+          }
+
+          col = mix(col, vec3(0.44, 0.72, 0.98), vProgress * 0.22);
+          col *= mix(0.86, 0.68, vProgress);
+          gl_FragColor = vec4(col, alpha);
+        }
+      `
+    });
+
+    const points = new THREE.Points(geometry, material);
+    points.frustumCulled = false;
+    scene.add(points);
+
+    const annotationData = [
+      { cn: '顶饰', en: 'Finial / weathervane', p: [0.0, 20.0 + MODULES[9].yOffset, 0.0], side: 'right', slot: 0 },
+      { cn: '尖顶', en: 'Spire, ribs, crockets', p: [0.0, 17.4 + MODULES[8].yOffset, 0.0], side: 'left', slot: 0 },
+      { cn: '檐口栏杆', en: 'Cornice & Balustrade', p: [-1.75, 15.6 + MODULES[7].yOffset, 0.0], side: 'left', slot: 1 },
+      { cn: '钟室', en: 'Belfry / Bell-Chamber', p: [0.8, 14.3 + MODULES[6].yOffset, 0.0], side: 'right', slot: 1 },
+      { cn: '大钟', en: 'Hour Bell', p: [4.55, 14.2 + MODULES[6].yOffset, 2.05], side: 'right', slot: 2 },
+      { cn: '钟锤', en: 'Hammer & bell crank', p: [5.15, 13.9 + MODULES[6].yOffset, 2.25], side: 'right', slot: 3 },
+      { cn: '钟面', en: 'Clock Face / opal glass', p: [-0.95, CLOCK_Y + MODULES[5].yOffset, CLOCK_HALF], side: 'left', slot: 2 },
+      { cn: '传动杆', en: 'Lead-off Rod', p: [4.35, CLOCK_Y + MODULES[5].yOffset, 2.35], side: 'right', slot: 4 },
+      { cn: '伞齿轮', en: 'Bevel Gear / motion work', p: [4.3, CLOCK_Y + 0.34 + MODULES[5].yOffset, 2.12], side: 'right', slot: 5 },
+      { cn: '钟机室', en: 'Clock-Movement Room', p: [-1.08, 10.9 + MODULES[4].yOffset, 0.0], side: 'left', slot: 3 },
+      { cn: '走时轮系', en: 'Going Train', p: [4.3, 11.15 + MODULES[4].yOffset, 2.35], side: 'right', slot: 6 },
+      { cn: '擒纵机构', en: 'Escapement', p: [4.75, 11.58 + MODULES[4].yOffset, 2.36], side: 'right', slot: 7 },
+      { cn: '钟摆', en: 'Pendulum & bob', p: [4.75, 10.0 + MODULES[4].yOffset, 2.36], side: 'right', slot: 8 },
+      { cn: '尖券长窗', en: 'Lancet window / tracery', p: [-0.8, 8.7 + MODULES[3].yOffset, 1.32], side: 'left', slot: 4 },
+      { cn: '角扶壁', en: 'Angle buttress', p: [-1.5, 4.8 + MODULES[2].yOffset, 1.5], side: 'left', slot: 5 },
+      { cn: '螺旋楼梯', en: 'Spiral Stair', p: [3.9, 4.4 + MODULES[2].yOffset, 1.85], side: 'right', slot: 9 },
+      { cn: '重锤竖井', en: 'Weight chute', p: [4.55, 5.2 + MODULES[2].yOffset, 1.57], side: 'right', slot: 10 },
+      { cn: '基座', en: 'Plinth', p: [-1.8, 0.62 + MODULES[1].yOffset, 1.7], side: 'left', slot: 6 }
+    ];
+
+    const labels = annotationData.map((item) => {
+      const el = document.createElement('div');
+      el.className = `annotation-label ${item.side === 'left' ? 'left' : 'right'}`;
+      el.innerHTML = `<span class="cn">${item.cn}</span><span class="en">${item.en}</span>`;
+      labelRenderer.domElement.appendChild(el);
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('r', '2.2');
+      leaderSvg.appendChild(line);
+      leaderSvg.appendChild(dot);
+      return { ...item, el, line, dot, world: new THREE.Vector3(item.p[0], item.p[1], item.p[2]) };
+    });
+
+    function updateAnnotations(alpha) {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const view = new THREE.Vector3();
+      leaderSvg.setAttribute('width', String(w));
+      leaderSvg.setAttribute('height', String(h));
+      leaderSvg.style.opacity = String(alpha);
+
+      labels.forEach((label, i) => {
+        view.copy(label.world).project(camera);
+        const x = (view.x * 0.5 + 0.5) * w;
+        const y = (-view.y * 0.5 + 0.5) * h;
+        const labelW = w < 680 ? 118 : Math.min(238, Math.max(164, Math.round(w * 0.15)));
+        const sidePad = w < 680 ? 8 : 28;
+        const tx = label.side === 'left' ? sidePad : w - labelW - sidePad;
+        const slotCount = label.side === 'left' ? 7 : 11;
+        const topPad = h < 760 ? 18 : 24;
+        const bottomPad = h < 760 ? 54 : 72;
+        const row = slotCount <= 1 ? 0 : label.slot / (slotCount - 1);
+        const ty = topPad + row * Math.max(1, h - topPad - bottomPad);
+        const endX = label.side === 'left' ? tx + labelW : tx;
+        const endY = ty + 19;
+
+        label.el.style.width = `${labelW}px`;
+        label.el.style.opacity = String(alpha);
+        label.el.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
+        label.line.setAttribute('x1', x.toFixed(1));
+        label.line.setAttribute('y1', y.toFixed(1));
+        label.line.setAttribute('x2', endX.toFixed(1));
+        label.line.setAttribute('y2', endY.toFixed(1));
+        label.dot.setAttribute('cx', x.toFixed(1));
+        label.dot.setAttribute('cy', y.toFixed(1));
+      });
+    }
+
+    let lastClockUpdate = -Infinity;
+    function updateClockHands(nowMs, force = false) {
+      if (!force && nowMs - lastClockUpdate < 180) return;
+      lastClockUpdate = nowMs;
+      const pixels = brightPixels(drawClockCanvas(true, true, new Date(nowMs)), 18);
+      for (const item of clockHandParticles) {
+        const [u, y] = sampleClockPixel(pixels, item.seed);
+        const p = mapFace(item.face, u, y, CLOCK_HALF, 0.08);
+        const i = item.idx * 3;
+        positionArray[i] = p[0];
+        positionArray[i + 1] = p[1];
+        positionArray[i + 2] = p[2];
+      }
+      positionAttribute.needsUpdate = true;
+    }
+
+    function timeline(t) {
+      const cycle = 16.4;
+      const p = (t % cycle) / cycle;
+      let progress = 0;
+      let labelAlpha = 0;
+      let hold = false;
+
+      if (p < 0.15) {
+        progress = 0;
+      } else if (p < 0.43) {
+        progress = smooth01((p - 0.15) / 0.28);
+      } else if (p < 0.72) {
+        progress = 1;
+        hold = true;
+        labelAlpha = smooth01(Math.min((p - 0.43) / 0.055, (0.72 - p) / 0.055));
+      } else if (p < 0.94) {
+        progress = 1 - smooth01((p - 0.72) / 0.22);
+      } else {
+        progress = 0;
+      }
+      return { progress, labelAlpha, hold };
+    }
+
+    function resize() {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const dpr = Math.min(window.devicePixelRatio || 1, DPR_LIMIT);
+      renderer.setPixelRatio(dpr);
+      renderer.setSize(w, h, false);
+      composer.setPixelRatio(dpr);
+      composer.setSize(w, h);
+      labelRenderer.setSize(w, h);
+      bloomPass.setSize(w * dpr, h * dpr);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      material.uniforms.uDpr.value = dpr;
+    }
+
+    window.addEventListener('resize', resize, { passive: true });
+    resize();
+    updateClockHands(performance.timeOrigin + performance.now(), true);
+
+    const start = performance.now();
+    function animate(now) {
+      const t = (now - start) * 0.001;
+      const state = timeline(t);
+      material.uniforms.uTime.value = t;
+      material.uniforms.uProgress.value = state.progress;
+      controls.autoRotateSpeed = state.hold ? 0.08 : 0.52;
+      points.rotation.y = Math.sin(t * 0.06) * 0.025;
+      updateClockHands(performance.timeOrigin + now);
+      controls.update();
+      updateAnnotations(state.labelAlpha);
+      composer.render();
+      labelRenderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
