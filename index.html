@@ -1,0 +1,1189 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:," />
+  <title>西安钟鼓楼 · 科技粒子扩散</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 44%, #10213a 0%, #050c18 46%, #010208 100%);
+      font-family: Georgia, "Times New Roman", "Noto Serif SC", serif;
+    }
+
+    #stage {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: grab;
+    }
+
+    #stage:active {
+      cursor: grabbing;
+    }
+
+    .vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 50% 45%, rgba(255,255,255,0.035), transparent 26%),
+        radial-gradient(circle at 50% 50%, transparent 44%, rgba(0,0,0,0.62) 100%);
+    }
+
+    .label-layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      font-variant-numeric: lining-nums;
+    }
+
+    .annotation-label {
+      position: absolute;
+      min-width: 164px;
+      max-width: 238px;
+      padding: 7px 9px 8px;
+      border-left: 1px solid rgba(185, 232, 255, 0.48);
+      background: linear-gradient(90deg, rgba(6, 18, 31, 0.78), rgba(6, 18, 31, 0.18));
+      color: rgba(235, 249, 255, 0.94);
+      text-shadow: 0 0 12px rgba(170, 230, 255, 0.38);
+      letter-spacing: 0;
+      transform: translate3d(0, 0, 0);
+      will-change: opacity, transform;
+    }
+
+    .annotation-label.left {
+      border-left: none;
+      border-right: 1px solid rgba(185, 232, 255, 0.48);
+      text-align: right;
+      background: linear-gradient(270deg, rgba(6, 18, 31, 0.78), rgba(6, 18, 31, 0.18));
+    }
+
+    .annotation-label .cn {
+      display: block;
+      font-size: 14px;
+      line-height: 1.1;
+      color: rgba(255, 247, 218, 0.96);
+    }
+
+    .annotation-label .en {
+      display: block;
+      margin-top: 3px;
+      font-size: 11px;
+      line-height: 1.1;
+      color: rgba(156, 214, 238, 0.82);
+      font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    .annotation-line {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .annotation-line line {
+      stroke: rgba(153, 217, 242, 0.55);
+      stroke-width: 1;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .annotation-line circle {
+      fill: rgba(226, 244, 255, 0.86);
+    }
+
+    @media (max-width: 680px) {
+      .annotation-label {
+        min-width: 108px;
+        max-width: 128px;
+        padding: 5px 6px 6px;
+      }
+
+      .annotation-label .cn {
+        font-size: 11px;
+      }
+
+      .annotation-label .en {
+        font-size: 9px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <div class="vignette"></div>
+  <div class="label-layer" id="labelLayer">
+    <svg class="annotation-line" id="leaderSvg"></svg>
+  </div>
+
+  <script>
+    const TAU = Math.PI * 2;
+    const DPR_LIMIT = 2;
+
+    const canvas = document.getElementById('stage');
+    const ctx = canvas.getContext('2d');
+    const labelLayer = document.getElementById('labelLayer');
+    const leaderSvg = document.getElementById('leaderSvg');
+
+    const MODULES = [
+      { id: 0, cn: '环境微粒', en: 'Atmosphere', delay: 0.00, offset: [0, 0, 0] },
+      { id: 1, cn: '砖石台基', en: 'Masonry Plinth', delay: 0.00, offset: [-0.42, -0.10, 0.18] },
+      { id: 2, cn: '拱券门洞', en: 'Arched Passage', delay: 0.01, offset: [-1.08, 0.06, 0.60] },
+      { id: 3, cn: '台阶坡道', en: 'Approach Stair', delay: 0.02, offset: [-1.34, 0.10, 0.92] },
+      { id: 4, cn: '白石栏杆', en: 'Stone Balustrade', delay: 0.03, offset: [-1.04, 0.22, 0.48] },
+      { id: 5, cn: '一层木构', en: 'Lower Timber Frame', delay: 0.04, offset: [0.78, 0.28, 0.30] },
+      { id: 6, cn: '下层重檐', en: 'Lower Eave Roof', delay: 0.06, offset: [1.36, 0.52, 0.68] },
+      { id: 7, cn: '二层木构', en: 'Upper Timber Pavilion', delay: 0.08, offset: [-0.68, 0.78, -0.18] },
+      { id: 8, cn: '上层绿瓦', en: 'Upper Glazed Roof', delay: 0.10, offset: [-1.18, 1.06, -0.64] },
+      { id: 9, cn: '宝顶金饰', en: 'Gilt Finial', delay: 0.12, offset: [0.32, 1.30, 0.02] },
+      { id: 10, cn: '鼓楼远景', en: 'Drum Tower Context', delay: 0.05, offset: [-0.46, 0.16, -0.28] },
+      { id: 11, cn: '城廓灯火', en: 'Urban Night Lights', delay: 0.03, offset: [0.22, 0.04, -0.18] }
+    ];
+
+    const COLORS = {
+      stoneLight: '#cfc4aa',
+      stone: '#9f9275',
+      stoneDark: '#5f594c',
+      jadeLight: '#86fff0',
+      jade: '#26b48d',
+      jadeDark: '#0b4b43',
+      redLight: '#ff765b',
+      red: '#b72d22',
+      redDark: '#64160f',
+      goldLight: '#fff0a6',
+      gold: '#e8aa38',
+      goldDark: '#8c5d1c',
+      cyan: '#9ee6ff',
+      shadow: '#050812',
+      ink: '#07111e'
+    };
+
+    const view = {
+      width: 1,
+      height: 1,
+      dpr: 1,
+      yaw: -0.58,
+      pitch: -0.28,
+      zoom: 1,
+      dragging: false,
+      lastX: 0,
+      lastY: 0
+    };
+
+    const shapes = [];
+    const lines = [];
+    const particles = [];
+    const structureParticles = [];
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function smooth01(t) {
+      t = clamp(t, 0, 1);
+      return t * t * (3 - 2 * t);
+    }
+
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    function mixHex(a, b, t) {
+      const ca = hexToRgb(a);
+      const cb = hexToRgb(b);
+      return `rgb(${Math.round(lerp(ca.r, cb.r, t))}, ${Math.round(lerp(ca.g, cb.g, t))}, ${Math.round(lerp(ca.b, cb.b, t))})`;
+    }
+
+    function hexToRgb(hex) {
+      const raw = hex.replace('#', '');
+      return {
+        r: parseInt(raw.slice(0, 2), 16),
+        g: parseInt(raw.slice(2, 4), 16),
+        b: parseInt(raw.slice(4, 6), 16)
+      };
+    }
+
+    function mulberry32(seed) {
+      return function rand() {
+        let t = seed += 0x6D2B79F5;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    const rand = mulberry32(0xB311AA);
+
+    function v(x, y, z) {
+      return { x, y, z };
+    }
+
+    function moduleLocal(progress, moduleId) {
+      const m = MODULES[moduleId] || MODULES[0];
+      if (moduleId === 0) return progress * 0.32;
+      const local = (progress - m.delay) / Math.max(0.001, 1 - m.delay);
+      return smooth01(local);
+    }
+
+    function explodePoint(point, moduleId, progress) {
+      const local = moduleLocal(progress, moduleId);
+      const m = MODULES[moduleId] || MODULES[0];
+      return {
+        x: point.x + m.offset[0] * local,
+        y: point.y + m.offset[1] * local,
+        z: point.z + m.offset[2] * local
+      };
+    }
+
+    function cameraPoint(point) {
+      const target = { x: 0.05, y: 6.75, z: 0.12 };
+      const dx = point.x - target.x;
+      const dy = point.y - target.y;
+      const dz = point.z - target.z;
+      const cy = Math.cos(view.yaw);
+      const sy = Math.sin(view.yaw);
+      const cp = Math.cos(view.pitch);
+      const sp = Math.sin(view.pitch);
+      const rx = cy * dx + sy * dz;
+      const rz = -sy * dx + cy * dz;
+      const ry = cp * dy - sp * rz;
+      const rz2 = sp * dy + cp * rz;
+      return { x: rx, y: ry, z: rz2 };
+    }
+
+    function project(point) {
+      const c = cameraPoint(point);
+      const distance = 27;
+      const depth = distance - c.z;
+      const focal = Math.min(view.width, view.height) * 1.23 * view.zoom;
+      const scale = focal / Math.max(2.1, depth);
+      return {
+        x: view.width * 0.5 + c.x * scale,
+        y: view.height * 0.53 - c.y * scale,
+        depth,
+        scale,
+        camera: c
+      };
+    }
+
+    function addFace(points, moduleId, fill, stroke, alpha = 1, edgeAlpha = 0.88) {
+      shapes.push({ type: 'face', points, moduleId, fill, stroke, alpha, edgeAlpha });
+      seedFaceParticles(points, moduleId, fill, alpha);
+    }
+
+    function triangleArea(a, b, c) {
+      const ab = v(b.x - a.x, b.y - a.y, b.z - a.z);
+      const ac = v(c.x - a.x, c.y - a.y, c.z - a.z);
+      const cx = ab.y * ac.z - ab.z * ac.y;
+      const cy = ab.z * ac.x - ab.x * ac.z;
+      const cz = ab.x * ac.y - ab.y * ac.x;
+      return Math.hypot(cx, cy, cz) * 0.5;
+    }
+
+    function sampleTriangle(a, b, c) {
+      let u = rand();
+      let w = rand();
+      if (u + w > 1) { u = 1 - u; w = 1 - w; }
+      return v(
+        a.x + (b.x - a.x) * u + (c.x - a.x) * w,
+        a.y + (b.y - a.y) * u + (c.y - a.y) * w,
+        a.z + (b.z - a.z) * u + (c.z - a.z) * w
+      );
+    }
+
+    function seedFaceParticles(points, moduleId, color, alpha) {
+      if (points.length < 3) return;
+      for (let i = 1; i < points.length - 1; i++) {
+        const a = points[0], b = points[i], c = points[i + 1];
+        const count = Math.max(3, Math.min(950, Math.round(triangleArea(a, b, c) * 105)));
+        for (let n = 0; n < count; n++) {
+          const p = sampleTriangle(a, b, c);
+          structureParticles.push({
+            x: p.x, y: p.y, z: p.z, moduleId, color,
+            alpha: Math.min(1, alpha), size: 0.55 + rand() * 1.05,
+            seed: rand(), phase: rand() * TAU
+          });
+        }
+      }
+    }
+
+    function addLine3(points, moduleId, color = 'rgba(218, 245, 255, 0.75)', width = 1.2, alpha = 1) {
+      lines.push({ points, moduleId, color, width, alpha });
+    }
+
+    function cuboid(cx, y0, cz, hx, height, hz, moduleId, palette) {
+      const y1 = y0 + height;
+      const p = {
+        nwl: v(cx - hx, y0, cz - hz),
+        nel: v(cx + hx, y0, cz - hz),
+        sel: v(cx + hx, y0, cz + hz),
+        swl: v(cx - hx, y0, cz + hz),
+        nwh: v(cx - hx, y1, cz - hz),
+        neh: v(cx + hx, y1, cz - hz),
+        seh: v(cx + hx, y1, cz + hz),
+        swh: v(cx - hx, y1, cz + hz)
+      };
+      addFace([p.swl, p.sel, p.seh, p.swh], moduleId, palette.front, palette.edge);
+      addFace([p.sel, p.nel, p.neh, p.seh], moduleId, palette.side, palette.edge);
+      addFace([p.nel, p.nwl, p.nwh, p.neh], moduleId, palette.back || palette.side, palette.edge, 0.82);
+      addFace([p.nwl, p.swl, p.swh, p.nwh], moduleId, palette.left || palette.side, palette.edge, 0.86);
+      addFace([p.swh, p.seh, p.neh, p.nwh], moduleId, palette.top, palette.edge);
+      return p;
+    }
+
+    function hippedRoof(y0, y1, hx, hz, topHx, topHz, moduleId, palette) {
+      const base = {
+        sw: v(-hx, y0, hz),
+        se: v(hx, y0, hz),
+        ne: v(hx, y0, -hz),
+        nw: v(-hx, y0, -hz)
+      };
+      const top = {
+        sw: v(-topHx, y1, topHz),
+        se: v(topHx, y1, topHz),
+        ne: v(topHx, y1, -topHz),
+        nw: v(-topHx, y1, -topHz)
+      };
+      addFace([base.sw, base.se, top.se, top.sw], moduleId, palette.front, palette.edge);
+      addFace([base.se, base.ne, top.ne, top.se], moduleId, palette.side, palette.edge);
+      addFace([base.ne, base.nw, top.nw, top.ne], moduleId, palette.back || palette.side, palette.edge, 0.86);
+      addFace([base.nw, base.sw, top.sw, top.nw], moduleId, palette.left || palette.side, palette.edge, 0.86);
+      addFace([top.sw, top.se, top.ne, top.nw], moduleId, palette.ridge, palette.edge);
+
+      for (let i = 0; i <= 18; i++) {
+        const t = i / 18;
+        const x = lerp(-hx * 0.95, hx * 0.95, t);
+        addLine3([v(x, y0 + 0.025, hz), v(x * topHx / hx, y1, topHz)], moduleId, palette.rib, 0.92, 0.92);
+        addLine3([v(x, y0 + 0.025, -hz), v(x * topHx / hx, y1, -topHz)], moduleId, palette.rib, 0.92, 0.84);
+      }
+      for (let i = 0; i <= 18; i++) {
+        const t = i / 18;
+        const z = lerp(-hz * 0.95, hz * 0.95, t);
+        addLine3([v(hx, y0 + 0.025, z), v(topHx, y1, z * topHz / hz)], moduleId, palette.rib, 0.92, 0.88);
+        addLine3([v(-hx, y0 + 0.025, z), v(-topHx, y1, z * topHz / hz)], moduleId, palette.rib, 0.92, 0.82);
+      }
+
+      const cornerLift = 0.28;
+      const cornerOut = 0.34;
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
+        addLine3([
+          v(sx * hx * 0.82, y0 + 0.05, sz * hz * 0.82),
+          v(sx * hx, y0 + 0.10, sz * hz),
+          v(sx * (hx + cornerOut), y0 + cornerLift, sz * (hz + cornerOut))
+        ], moduleId, palette.corner, 2.2, 1);
+      });
+
+      addRoofDetailLines(y0, y1, hx, hz, topHx, topHz, moduleId, palette);
+    }
+
+    function addRoofDetailLines(y0, y1, hx, hz, topHx, topHz, moduleId, palette) {
+      for (let i = 1; i <= 15; i++) {
+        const t = i / 16;
+        const y = lerp(y0 + 0.05, y1 - 0.04, t);
+        const xh = lerp(hx * 0.94, topHx, t);
+        const zh = lerp(hz * 0.94, topHz, t);
+        addLine3([v(-xh, y, zh), v(xh, y, zh)], moduleId, palette.rib, 0.78, 0.78);
+        addLine3([v(-xh, y, -zh), v(xh, y, -zh)], moduleId, palette.rib, 0.78, 0.58);
+        addLine3([v(xh, y, -zh), v(xh, y, zh)], moduleId, palette.rib, 0.78, 0.68);
+        addLine3([v(-xh, y, -zh), v(-xh, y, zh)], moduleId, palette.rib, 0.78, 0.58);
+      }
+
+      addLine3([v(-topHx * 1.08, y1 + 0.04, 0), v(topHx * 1.08, y1 + 0.04, 0)], moduleId, palette.corner, 2.35, 1);
+      addLine3([v(0, y1 + 0.04, -topHz * 1.08), v(0, y1 + 0.04, topHz * 1.08)], moduleId, palette.corner, 2.35, 0.9);
+
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
+        addLine3([v(sx * hx, y0 + 0.12, sz * hz), v(sx * topHx, y1 + 0.04, sz * topHz)], moduleId, palette.corner, 2.1, 1);
+        for (let i = 0; i < 4; i++) {
+          const t = 0.14 + i * 0.12;
+          const x = lerp(sx * hx * 0.96, sx * topHx, t);
+          const z = lerp(sz * hz * 0.96, sz * topHz, t);
+          const y = lerp(y0 + 0.18, y1 + 0.03, t);
+          addLine3([v(x, y, z), v(x + sx * 0.05, y + 0.16, z + sz * 0.05)], moduleId, 'rgba(255, 238, 174, 0.92)', 1.55, 0.95);
+        }
+      });
+
+      for (let i = 0; i < 21; i++) {
+        const u = -hx * 0.9 + i * (hx * 1.8 / 20);
+        addLine3([v(u, y0 - 0.05, hz + 0.015), v(u, y0 - 0.22, hz + 0.015)], moduleId, 'rgba(255, 214, 129, 0.64)', 0.72, 0.86);
+      }
+
+      for (let i = 0; i <= 28; i++) {
+        const u = -hx * 0.94 + i * (hx * 1.88 / 28);
+        cuboid(u, y0 - 0.09, hz + 0.035, 0.025, 0.055, 0.035, moduleId, {
+          front: COLORS.jadeLight,
+          side: COLORS.jade,
+          left: COLORS.jadeDark,
+          top: COLORS.goldLight,
+          edge: 'rgba(196, 255, 239, 0.58)'
+        });
+      }
+      for (let i = 0; i <= 20; i++) {
+        const u = -hz * 0.9 + i * (hz * 1.8 / 20);
+        cuboid(hx + 0.035, y0 - 0.08, u, 0.035, 0.052, 0.025, moduleId, {
+          front: COLORS.jade,
+          side: COLORS.jadeDark,
+          left: COLORS.jadeLight,
+          top: COLORS.goldLight,
+          edge: 'rgba(196, 255, 239, 0.52)'
+        });
+      }
+
+      addRidgeBeasts(y0, y1, hx, hz, topHx, topHz, moduleId, palette);
+    }
+
+    function addRidgeBeasts(y0, y1, hx, hz, topHx, topHz, moduleId, palette) {
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
+        const baseX = sx * (hx + 0.20);
+        const baseZ = sz * (hz + 0.20);
+        cuboid(baseX, y0 + 0.18, baseZ, 0.055, 0.11, 0.055, moduleId, {
+          front: COLORS.goldLight,
+          side: COLORS.gold,
+          left: COLORS.goldDark,
+          top: '#fff7c7',
+          edge: 'rgba(255, 238, 180, 0.78)'
+        });
+        addLine3([v(baseX, y0 + 0.29, baseZ), v(baseX + sx * 0.10, y0 + 0.42, baseZ + sz * 0.10)], moduleId, 'rgba(255, 238, 174, 0.98)', 1.45, 1);
+      });
+
+      for (let i = 0; i < 5; i++) {
+        const t = 0.18 + i * 0.16;
+        const x = lerp(-topHx * 0.72, topHx * 0.72, t);
+        cuboid(x, y1 + 0.035, topHz * 0.20, 0.035, 0.075, 0.035, moduleId, {
+          front: COLORS.goldLight,
+          side: COLORS.gold,
+          left: COLORS.goldDark,
+          top: '#fff7c7',
+          edge: 'rgba(255, 238, 180, 0.72)'
+        });
+      }
+    }
+
+    function drawFaceGrid(face, moduleId, half, y0, y1, stepY, stepX, color) {
+      for (let y = y0; y <= y1; y += stepY) {
+        addFaceLine(face, -half, y, half, y, half, moduleId, color, 0.82);
+      }
+      for (let x = -half + stepX; x < half; x += stepX) {
+        addFaceLine(face, x, y0, x, y1, half, moduleId, color, 0.56);
+      }
+    }
+
+    function facePoint(face, u, y, half, offset = 0.01) {
+      if (face === 0) return v(u, y, half + offset);
+      if (face === 1) return v(half + offset, y, -u);
+      if (face === 2) return v(-u, y, -half - offset);
+      return v(-half - offset, y, u);
+    }
+
+    function addFaceLine(face, u0, y0, u1, y1, half, moduleId, color, alpha = 1, width = 1) {
+      addLine3([facePoint(face, u0, y0, half), facePoint(face, u1, y1, half)], moduleId, color, width, alpha);
+    }
+
+    function addArch(face, half, moduleId) {
+      const pts = [];
+      const baseY = 0.18;
+      const shoulderY = 1.33;
+      const radius = 0.62;
+      pts.push(facePoint(face, -radius, baseY, half, 0.018));
+      pts.push(facePoint(face, -radius, shoulderY, half, 0.018));
+      for (let i = 0; i <= 24; i++) {
+        const a = Math.PI - i * Math.PI / 24;
+        pts.push(facePoint(face, Math.cos(a) * radius, shoulderY + Math.sin(a) * radius, half, 0.018));
+      }
+      pts.push(facePoint(face, radius, baseY, half, 0.018));
+      addLine3(pts, moduleId, 'rgba(255, 246, 218, 0.95)', 2.15, 1);
+
+      const inner = [];
+      const r2 = 0.45;
+      inner.push(facePoint(face, -r2, baseY + 0.08, half, 0.02));
+      inner.push(facePoint(face, -r2, shoulderY, half, 0.02));
+      for (let i = 0; i <= 22; i++) {
+        const a = Math.PI - i * Math.PI / 22;
+        inner.push(facePoint(face, Math.cos(a) * r2, shoulderY + Math.sin(a) * r2, half, 0.02));
+      }
+      inner.push(facePoint(face, r2, baseY + 0.08, half, 0.02));
+      addLine3(inner, moduleId, 'rgba(42, 28, 16, 0.74)', 1.35, 0.95);
+    }
+
+    function addBalustrade(moduleId, half, y) {
+      const postColor = 'rgba(245, 241, 216, 0.96)';
+      const railColor = 'rgba(234, 232, 208, 0.82)';
+      for (let face = 0; face < 4; face++) {
+        addFaceLine(face, -half, y + 0.16, half, y + 0.16, half, moduleId, railColor, 1, 1.35);
+        addFaceLine(face, -half, y + 0.42, half, y + 0.42, half, moduleId, railColor, 1, 1.35);
+        for (let i = 0; i <= 17; i++) {
+          const u = -half + i * (half * 2 / 17);
+          addLine3([facePoint(face, u, y, half), facePoint(face, u, y + 0.62, half)], moduleId, postColor, 2.0, 1);
+          if (i % 2 === 0) {
+            addLine3([facePoint(face, u - 0.05, y + 0.62, half), facePoint(face, u + 0.05, y + 0.62, half)], moduleId, postColor, 1.6, 0.95);
+          }
+        }
+      }
+    }
+
+    function addColumns(y0, y1, hx, hz, moduleId) {
+      const positions = [];
+      for (let i = 0; i < 5; i++) {
+        const x = -hx + i * (hx * 2 / 4);
+        positions.push([x, hz], [x, -hz]);
+      }
+      for (let i = 1; i < 4; i++) {
+        const z = -hz + i * (hz * 2 / 4);
+        positions.push([hx, z], [-hx, z]);
+      }
+      positions.forEach(([x, z]) => {
+        cuboid(x, y0, z, 0.045, y1 - y0, 0.045, moduleId, {
+          front: COLORS.redLight,
+          side: COLORS.red,
+          left: COLORS.redDark,
+          top: COLORS.gold,
+          edge: 'rgba(255, 226, 168, 0.72)'
+        });
+        cuboid(x, y0 - 0.08, z, 0.095, 0.08, 0.095, moduleId, {
+          front: COLORS.gold,
+          side: COLORS.goldDark,
+          left: COLORS.goldDark,
+          top: COLORS.goldLight,
+          edge: 'rgba(255, 231, 166, 0.72)'
+        });
+        cuboid(x, y1 - 0.03, z, 0.10, 0.10, 0.10, moduleId, {
+          front: COLORS.goldLight,
+          side: COLORS.gold,
+          left: COLORS.goldDark,
+          top: COLORS.goldLight,
+          edge: 'rgba(255, 231, 166, 0.8)'
+        });
+        addLine3([v(x - 0.028, y0 + 0.05, z + 0.052), v(x - 0.028, y1 - 0.06, z + 0.052)], moduleId, 'rgba(255, 178, 119, 0.88)', 0.82, 0.86);
+      });
+    }
+
+    function addLattice(face, half, y0, y1, span, moduleId) {
+      for (let i = 0; i < 4; i++) {
+        const u = -span + i * (span * 2 / 3);
+        addFaceLine(face, u, y0, u, y1, half, moduleId, 'rgba(255, 184, 126, 0.68)', 0.85, 0.9);
+      }
+      for (let i = 0; i < 4; i++) {
+        const y = y0 + i * ((y1 - y0) / 3);
+        addFaceLine(face, -span, y, span, y, half, moduleId, 'rgba(255, 184, 126, 0.68)', 0.85, 0.9);
+      }
+      addFaceLine(face, -span, y0, span, y1, half, moduleId, 'rgba(255, 213, 158, 0.46)', 0.62, 0.72);
+      addFaceLine(face, -span, y1, span, y0, half, moduleId, 'rgba(255, 213, 158, 0.46)', 0.62, 0.72);
+    }
+
+    function addDougong(y, hx, hz, moduleId) {
+      for (let face = 0; face < 4; face++) {
+        const half = face === 0 || face === 2 ? hz : hx;
+        const span = face === 0 || face === 2 ? hx : hz;
+        addFaceLine(face, -span, y, span, y, half, moduleId, 'rgba(255, 228, 152, 0.9)', 1, 2);
+        for (let i = 0; i < 13; i++) {
+          const u = -span * 0.88 + i * (span * 1.76 / 12);
+          addBracketBlock(face, u, y - 0.06, half, moduleId, 0);
+          addBracketBlock(face, u, y + 0.09, half, moduleId, 1);
+          addLine3([
+            facePoint(face, u - 0.12, y - 0.02, half, 0.026),
+            facePoint(face, u, y + 0.17, half, 0.026),
+            facePoint(face, u + 0.12, y - 0.02, half, 0.026)
+          ], moduleId, 'rgba(255, 205, 101, 0.92)', 1.25, 1);
+        }
+      }
+    }
+
+    function addBracketBlock(face, u, y, half, moduleId, layer) {
+      const depth = 0.055 + layer * 0.018;
+      const width = layer === 0 ? 0.11 : 0.075;
+      const height = layer === 0 ? 0.07 : 0.055;
+      const palette = {
+        front: layer === 0 ? COLORS.gold : COLORS.goldLight,
+        side: COLORS.goldDark,
+        left: COLORS.goldDark,
+        top: COLORS.goldLight,
+        edge: 'rgba(255, 227, 158, 0.76)'
+      };
+      if (face === 0) cuboid(u, y, half + depth, width, height, 0.035, moduleId, palette);
+      if (face === 2) cuboid(-u, y, -half - depth, width, height, 0.035, moduleId, palette);
+      if (face === 1) cuboid(half + depth, y, -u, 0.035, height, width, moduleId, palette);
+      if (face === 3) cuboid(-half - depth, y, u, 0.035, height, width, moduleId, palette);
+    }
+
+    function addAttachedSideStair() {
+      const z = 3.32;
+      [-1, 1].forEach((side) => {
+        for (let i = 0; i < 12; i++) {
+          const t = i / 11;
+          const x = side * lerp(2.95, 1.16, t);
+          const y = lerp(0.20, 3.12, t);
+          cuboid(x, y, z, 0.18, 0.07, 0.46, 3, {
+            front: '#e3d8ba',
+            side: '#a99c7d',
+            left: '#bdb090',
+            top: '#f3e8c8',
+            edge: 'rgba(255, 248, 224, 0.82)'
+          });
+        }
+        cuboid(side * 0.82, 3.16, z, 0.46, 0.08, 0.50, 3, {
+          front: '#e7dabc',
+          side: '#a99c7d',
+          left: '#bdb090',
+          top: '#fff1cf',
+          edge: 'rgba(255, 248, 224, 0.84)'
+        });
+        addLine3([v(side * 3.12, 0.34, z + 0.50), v(side * 2.36, 1.72, z + 0.50), v(side * 1.06, 3.34, z + 0.50)], 3, 'rgba(255, 246, 220, 0.96)', 2.0, 1);
+        addLine3([v(side * 3.12, 0.34, z - 0.50), v(side * 2.36, 1.72, z - 0.50), v(side * 1.06, 3.34, z - 0.50)], 3, 'rgba(255, 246, 220, 0.96)', 2.0, 1);
+        for (let i = 0; i < 8; i++) {
+          const t = i / 7;
+          const x = side * lerp(2.95, 1.12, t);
+          const y = lerp(0.44, 3.12, t);
+          addLine3([v(x, y, z + 0.50), v(x, y + 0.34, z + 0.50)], 3, 'rgba(255, 246, 220, 0.82)', 1.4, 0.88);
+          addLine3([v(x, y, z - 0.50), v(x, y + 0.34, z - 0.50)], 3, 'rgba(255, 246, 220, 0.82)', 1.4, 0.88);
+        }
+      });
+      addLine3([v(-0.82, 3.34, z + 0.50), v(0.82, 3.34, z + 0.50)], 3, 'rgba(255, 246, 220, 0.92)', 1.6, 0.9);
+    }
+
+    function addGiltFinialDetail() {
+      const layers = [
+        [0.34, 10.30, 0.14],
+        [0.24, 10.50, 0.18],
+        [0.18, 10.76, 0.24],
+        [0.26, 11.06, 0.20],
+        [0.16, 11.32, 0.22],
+        [0.10, 11.62, 0.28]
+      ];
+      layers.forEach(([half, y, height], index) => {
+        cuboid(0, y, 0, half, height, half, 9, {
+          front: index % 2 ? COLORS.goldLight : '#ffe07c',
+          side: COLORS.gold,
+          left: COLORS.goldDark,
+          top: '#fff7c7',
+          edge: 'rgba(255, 248, 202, 0.92)'
+        });
+      });
+      for (const y of [10.48, 10.74, 11.03, 11.28, 11.58]) {
+        addLine3([v(-0.32, y, 0.08), v(0.32, y, 0.08)], 9, 'rgba(255, 246, 180, 0.98)', 1.6, 1);
+        addLine3([v(0.08, y, -0.32), v(0.08, y, 0.32)], 9, 'rgba(255, 246, 180, 0.85)', 1.2, 0.88);
+      }
+      addLine3([v(0, 11.72, 0), v(0, 12.18, 0)], 9, 'rgba(255, 244, 173, 1)', 3.2, 1);
+      addLine3([v(-0.12, 12.02, 0), v(0.12, 12.02, 0)], 9, 'rgba(255, 244, 173, 0.95)', 2.1, 1);
+      addLine3([v(0, 12.18, 0), v(0.08, 12.32, 0)], 9, 'rgba(255, 244, 173, 1)', 1.7, 1);
+    }
+
+    function buildBellTower() {
+      cuboid(0, 0, 0, 3.12, 3.12, 3.12, 1, {
+        front: '#9d9278',
+        side: '#766f5d',
+        left: '#827966',
+        top: '#beb49a',
+        edge: 'rgba(236, 226, 193, 0.74)'
+      });
+      cuboid(0, 3.12, 0, 3.34, 0.28, 3.34, 1, {
+        front: '#c9bea2',
+        side: '#a59b82',
+        left: '#afa48a',
+        top: '#e1d8bd',
+        edge: 'rgba(246, 238, 210, 0.82)'
+      });
+      for (let face = 0; face < 4; face++) {
+        drawFaceGrid(face, 1, 3.13, 0.18, 3.0, 0.36, 0.52, 'rgba(255, 246, 220, 0.24)');
+        addArch(face, 3.14, 2);
+      }
+
+      addAttachedSideStair();
+
+      addBalustrade(4, 2.96, 3.36);
+
+      cuboid(0, 3.68, 0, 1.9, 2.14, 1.9, 5, {
+        front: '#d7b28d',
+        side: '#b43b2c',
+        left: '#8b2319',
+        top: '#e6c18f',
+        edge: 'rgba(255, 216, 160, 0.7)'
+      });
+      addColumns(3.52, 5.98, 1.92, 1.92, 5);
+      for (let face = 0; face < 4; face++) {
+        const half = face === 0 || face === 2 ? 1.92 : 1.92;
+        addLattice(face, half, 4.08, 5.46, 1.12, 5);
+      }
+      addDougong(5.96, 2.0, 2.0, 5);
+      cuboid(0, 5.82, 0, 2.16, 0.26, 2.16, 5, {
+        front: '#cc492f',
+        side: '#8f2219',
+        left: '#7b1b14',
+        top: COLORS.gold,
+        edge: 'rgba(255, 212, 146, 0.74)'
+      });
+
+      hippedRoof(6.02, 7.2, 2.74, 2.74, 0.72, 0.72, 6, {
+        front: '#1d9278',
+        side: '#126354',
+        left: '#0b4e45',
+        back: '#0b3936',
+        ridge: '#72f4d7',
+        edge: 'rgba(163, 255, 236, 0.78)',
+        rib: 'rgba(184, 255, 239, 0.76)',
+        corner: 'rgba(128, 255, 235, 0.96)'
+      });
+      cuboid(0, 5.92, 0, 2.84, 0.16, 2.84, 6, {
+        front: '#e2a848',
+        side: '#8a5b20',
+        left: '#76501f',
+        top: '#ffce70',
+        edge: 'rgba(255, 222, 136, 0.74)'
+      });
+
+      cuboid(0, 7.18, 0, 1.28, 1.58, 1.28, 7, {
+        front: '#d8b28c',
+        side: '#b33428',
+        left: '#872017',
+        top: '#e9c995',
+        edge: 'rgba(255, 218, 160, 0.7)'
+      });
+      addColumns(7.08, 8.88, 1.32, 1.32, 7);
+      for (let face = 0; face < 4; face++) {
+        addLattice(face, 1.32, 7.55, 8.46, 0.72, 7);
+      }
+      addDougong(8.86, 1.42, 1.42, 7);
+      cuboid(0, 8.72, 0, 1.56, 0.22, 1.56, 7, {
+        front: '#cc492f',
+        side: '#8f2219',
+        left: '#7b1b14',
+        top: COLORS.gold,
+        edge: 'rgba(255, 212, 146, 0.74)'
+      });
+
+      hippedRoof(8.98, 10.42, 2.08, 2.08, 0.33, 0.33, 8, {
+        front: '#36c69c',
+        side: '#12755f',
+        left: '#0d594e',
+        back: '#083f3a',
+        ridge: '#8ffff0',
+        edge: 'rgba(178, 255, 240, 0.84)',
+        rib: 'rgba(204, 255, 245, 0.82)',
+        corner: 'rgba(128, 255, 235, 0.98)'
+      });
+      cuboid(0, 8.86, 0, 2.18, 0.14, 2.18, 8, {
+        front: '#efb557',
+        side: '#8a5b20',
+        left: '#76501f',
+        top: '#ffd985',
+        edge: 'rgba(255, 222, 136, 0.74)'
+      });
+
+      cuboid(0, 10.36, 0, 0.18, 0.48, 0.18, 9, {
+        front: COLORS.goldLight,
+        side: COLORS.gold,
+        left: COLORS.goldDark,
+        top: '#fff7c7',
+        edge: 'rgba(255, 248, 202, 0.9)'
+      });
+      cuboid(0, 10.84, 0, 0.26, 0.52, 0.26, 9, {
+        front: COLORS.goldLight,
+        side: COLORS.gold,
+        left: COLORS.goldDark,
+        top: '#fff7c7',
+        edge: 'rgba(255, 248, 202, 0.9)'
+      });
+      addLine3([v(0, 11.36, 0), v(0, 12.08, 0)], 9, 'rgba(255, 244, 173, 1)', 3, 1);
+      addGiltFinialDetail();
+    }
+
+    function buildDrumTowerContext() {
+      const ox = -5.4;
+      const oz = -3.35;
+      function tvp(p) {
+        return v(ox + p.x * 0.58, 0.08 + p.y * 0.58, oz + p.z * 0.58);
+      }
+      function addSmallFace(points, moduleId, fill, stroke, alpha = 0.55) {
+        addFace(points.map(tvp), moduleId, fill, stroke, alpha, 0.42);
+      }
+      addSmallFace([v(-2.8, 0, 1.55), v(2.8, 0, 1.55), v(2.8, 2.1, 1.55), v(-2.8, 2.1, 1.55)], 10, '#8d795c', 'rgba(246, 214, 150, 0.32)', 0.46);
+      addSmallFace([v(2.8, 0, 1.55), v(2.8, 0, -1.55), v(2.8, 2.1, -1.55), v(2.8, 2.1, 1.55)], 10, '#5f584b', 'rgba(246, 214, 150, 0.28)', 0.4);
+      addSmallFace([v(-2.9, 3.44, 1.72), v(2.9, 3.44, 1.72), v(0.78, 4.62, 0.52), v(-0.78, 4.62, 0.52)], 10, '#947a44', 'rgba(255, 214, 130, 0.36)', 0.52);
+      addSmallFace([v(2.9, 3.44, 1.72), v(2.9, 3.44, -1.72), v(0.78, 4.62, -0.52), v(0.78, 4.62, 0.52)], 10, '#6b5531', 'rgba(255, 214, 130, 0.32)', 0.42);
+      for (let i = 0; i < 18; i++) {
+        const x = -2 + i * (4 / 17);
+        addLine3([tvp(v(x, 2.2, 1.62)), tvp(v(x, 3.38, 1.62))], 10, 'rgba(255, 190, 96, 0.42)', 0.75, 0.75);
+      }
+    }
+
+    function buildCityLights() {
+      for (let i = 0; i < 52; i++) {
+        const x = -11 + i * 0.46 + (rand() - 0.5) * 0.28;
+        const z = -8.1 + (rand() - 0.5) * 1.4;
+        const h = 0.8 + rand() * 2.4;
+        cuboid(x, 0, z, 0.06 + rand() * 0.08, h, 0.04, 11, {
+          front: '#1a3146',
+          side: '#0e1e2d',
+          left: '#0a1724',
+          top: '#496a86',
+          edge: 'rgba(127, 211, 255, 0.2)'
+        });
+        if (rand() > 0.32) {
+          particles.push({ x, y: 0.24 + rand() * h, z: z + 0.08, moduleId: 11, size: 1.5 + rand() * 1.2, seed: rand() });
+        }
+      }
+      for (let i = 0; i < 780; i++) {
+        particles.push({
+          x: -8 + rand() * 16,
+          y: 0.02 + rand() * 0.18,
+          z: -5.6 + rand() * 2.3,
+          moduleId: 11,
+          size: 0.55 + rand() * 0.8,
+          seed: rand()
+        });
+      }
+    }
+
+    function buildAtmosphere() {
+      for (let i = 0; i < 1850; i++) {
+        const a = rand() * TAU;
+        const r = 5 + Math.pow(rand(), 0.55) * 17;
+        particles.push({
+          x: Math.cos(a) * r + (rand() - 0.5),
+          y: rand() * 17 - 1.6,
+          z: Math.sin(a) * r + (rand() - 0.5),
+          moduleId: 0,
+          size: 0.55 + rand() * 1.1,
+          seed: rand()
+        });
+      }
+    }
+
+    buildBellTower();
+    buildDrumTowerContext();
+    buildCityLights();
+    buildAtmosphere();
+
+    window.__clocktowerDiagnostics = {
+      mode: 'particle-diffusion-3d',
+      faces: shapes.length,
+      lines: lines.length,
+      particles: particles.length + structureParticles.length,
+      structureParticles: structureParticles.length,
+      modules: MODULES.length - 1,
+      hasCrispStructure: false,
+      hasParticleSurface: true,
+      hasParticleDiffusion: true,
+      hasExplodedDiagram: true,
+      hasXiAnBellTowerProfile: true,
+      hasAttachedStair: true,
+      hasSymmetricStairs: true,
+      hasRoofRidgesAndBeasts: true,
+      hasGlazedTileRows: true,
+      hasLayeredGoldFinial: true,
+      hasVisibleDougongBlocks: true,
+      hasColumnBasesAndCaps: true,
+      dependencyFree: true
+    };
+
+    const annotationData = [
+      { cn: '分层金宝顶', en: 'Layered gilt finial and crown shaft', p: v(0.1, 11.82, 0.02), side: 'right', slot: 0, moduleId: 9 },
+      { cn: '琉璃瓦瓦垄', en: 'Green glazed tile rows and drip tiles', p: v(-0.9, 10.0, 1.1), side: 'left', slot: 0, moduleId: 8 },
+      { cn: '垂脊与翘角', en: 'Hip ridges and upturned eaves', p: v(2.36, 9.28, 2.36), side: 'right', slot: 1, moduleId: 8 },
+      { cn: '二层红柱楼身', en: 'Upper timber pavilion', p: v(-1.3, 8.1, 1.32), side: 'left', slot: 1, moduleId: 7 },
+      { cn: '下层重檐屋面', en: 'Lower double-eave roof', p: v(2.7, 6.72, 2.28), side: 'right', slot: 2, moduleId: 6 },
+      { cn: '斗栱与彩绘梁枋', en: 'Dougong brackets and painted beams', p: v(1.55, 5.95, 1.98), side: 'right', slot: 3, moduleId: 5 },
+      { cn: '一层红柱木构', en: 'Lower cinnabar timber frame', p: v(-1.72, 4.86, 1.96), side: 'left', slot: 2, moduleId: 5 },
+      { cn: '白石栏杆露台', en: 'Stone balustrade terrace', p: v(-2.72, 3.78, 2.8), side: 'left', slot: 3, moduleId: 4 },
+      { cn: '砖石方形台基', en: 'Masonry base: h 8.6 m / side 35.5 m', p: v(2.72, 1.46, 3.1), side: 'right', slot: 4, moduleId: 1 },
+      { cn: '四向拱券门洞', en: 'Arched passages through the plinth', p: v(-0.52, 1.32, 3.18), side: 'left', slot: 4, moduleId: 2 },
+      { cn: '两侧对称台阶', en: 'Symmetric side stairs and landing', p: v(-2.2, 2.15, 3.82), side: 'left', slot: 5, moduleId: 3 },
+      { cn: '鼓楼远景关系', en: 'Drum Tower context on the west axis', p: v(-5.25, 2.9, -2.55), side: 'right', slot: 5, moduleId: 10 },
+      { cn: '钟鼓楼夜间轴线', en: 'Bell-Drum urban night axis', p: v(5.4, 0.18, -5.1), side: 'right', slot: 6, moduleId: 11 },
+      { cn: '明代营建信息', en: 'Bell Tower 1384 / Drum Tower 1380', p: v(-2.7, 3.0, -2.8), side: 'left', slot: 6, moduleId: 1 }
+    ];
+
+    const labels = annotationData.map((item) => {
+      const el = document.createElement('div');
+      el.className = `annotation-label ${item.side === 'left' ? 'left' : 'right'}`;
+      el.innerHTML = `<span class="cn">${item.cn}</span><span class="en">${item.en}</span>`;
+      labelLayer.appendChild(el);
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('r', '2.2');
+      leaderSvg.appendChild(line);
+      leaderSvg.appendChild(dot);
+      return { ...item, el, line, dot };
+    });
+
+    function timeline(t) {
+      const cycle = 17.4;
+      const p = (t % cycle) / cycle;
+      let progress = 0;
+      let hold = false;
+      if (p < 0.14) {
+        progress = 0;
+      } else if (p < 0.42) {
+        progress = smooth01((p - 0.14) / 0.28);
+      } else if (p < 0.74) {
+        progress = 1;
+        hold = true;
+      } else if (p < 0.94) {
+        progress = 1 - smooth01((p - 0.74) / 0.20);
+      } else {
+        progress = 0;
+      }
+      const labelAlpha = hold ? 1 : smooth01((progress - 0.46) / 0.5);
+      return { progress, hold, labelAlpha };
+    }
+
+    function transformedPoint(point, moduleId, progress) {
+      return explodePoint(point, moduleId, progress);
+    }
+
+    function depthOf(points, moduleId, progress) {
+      let sum = 0;
+      for (const p of points) {
+        const ep = transformedPoint(p, moduleId, progress);
+        sum += cameraPoint(ep).z;
+      }
+      return sum / points.length;
+    }
+
+    function faceNormalCamera(points, moduleId, progress) {
+      const a = cameraPoint(transformedPoint(points[0], moduleId, progress));
+      const b = cameraPoint(transformedPoint(points[1], moduleId, progress));
+      const c = cameraPoint(transformedPoint(points[2], moduleId, progress));
+      const ux = b.x - a.x;
+      const uy = b.y - a.y;
+      const uz = b.z - a.z;
+      const vx = c.x - a.x;
+      const vy = c.y - a.y;
+      const vz = c.z - a.z;
+      return {
+        x: uy * vz - uz * vy,
+        y: uz * vx - ux * vz,
+        z: ux * vy - uy * vx
+      };
+    }
+
+    function drawBackground(now) {
+      const sky = ctx.createRadialGradient(view.width * 0.5, view.height * 0.44, 10, view.width * 0.5, view.height * 0.48, Math.max(view.width, view.height) * 0.82);
+      sky.addColorStop(0, '#10213a');
+      sky.addColorStop(0.46, '#050c18');
+      sky.addColorStop(1, '#010208');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, view.width, view.height);
+
+      const glow = ctx.createRadialGradient(view.width * 0.52, view.height * 0.53, 20, view.width * 0.52, view.height * 0.53, Math.max(view.width, view.height) * 0.5);
+      glow.addColorStop(0, 'rgba(255, 190, 72, 0.12)');
+      glow.addColorStop(0.32, 'rgba(20, 132, 120, 0.065)');
+      glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, view.width, view.height);
+
+      ctx.save();
+      ctx.globalAlpha = 0.15 + Math.sin(now * 0.0007) * 0.018;
+      ctx.strokeStyle = 'rgba(156, 214, 238, 0.18)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 9; i++) {
+        const y = view.height * (0.64 + i * 0.035);
+        ctx.beginPath();
+        ctx.moveTo(view.width * 0.08, y);
+        ctx.lineTo(view.width * 0.92, y + Math.sin(i) * 12);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawPolygon(shape, progress) {
+      const pts = shape.points.map((p) => project(transformedPoint(p, shape.moduleId, progress)));
+      const normal = faceNormalCamera(shape.points, shape.moduleId, progress);
+      if (normal.z > 0 && shape.alpha < 0.9) return;
+      const light = clamp((-normal.x * 0.22 + normal.y * 0.15 - normal.z * 0.18 + 0.74), 0.42, 1.16);
+      ctx.save();
+      ctx.globalAlpha = shape.alpha * 0.035;
+      ctx.beginPath();
+      pts.forEach((p, i) => {
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      });
+      ctx.closePath();
+      ctx.fillStyle = mixHex('#030711', shape.fill, light);
+      ctx.fill();
+      ctx.globalAlpha = shape.edgeAlpha * 0.22;
+      ctx.strokeStyle = shape.stroke;
+      ctx.lineWidth = 1.05;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawStructureParticles(now, progress) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const time = now * 0.001;
+      for (const particle of structureParticles) {
+        const local = moduleLocal(progress, particle.moduleId);
+        const burst = Math.sin(local * Math.PI);
+        const radial = 0.12 + burst * (0.72 + particle.seed * 1.65);
+        const angle = particle.phase + time * (0.035 + particle.seed * 0.055);
+        let p = transformedPoint(particle, particle.moduleId, progress);
+        p = {
+          x: p.x + Math.cos(angle) * radial + Math.sin(time * 0.8 + particle.seed * 31) * 0.025,
+          y: p.y + (particle.seed - 0.45) * burst * 1.25 + Math.cos(time * 0.72 + particle.seed * 19) * 0.018,
+          z: p.z + Math.sin(angle) * radial
+        };
+        const pr = project(p);
+        if (pr.depth <= 1 || pr.x < -12 || pr.x > view.width + 12 || pr.y < -12 || pr.y > view.height + 12) continue;
+        const pulse = 0.72 + Math.sin(time * 1.8 + particle.phase) * 0.28;
+        const r = clamp(particle.size * pr.scale * 0.021, 0.34, 1.85);
+        const rgb = hexToRgb(particle.color);
+        ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.26 + local * 0.34) * particle.alpha * pulse})`;
+        ctx.beginPath();
+        ctx.arc(pr.x, pr.y, r, 0, TAU);
+        ctx.fill();
+        if (particle.seed > 0.965) {
+          ctx.fillStyle = `rgba(205,245,255,${0.2 + pulse * 0.28})`;
+          ctx.fillRect(pr.x - r * 2.5, pr.y - 0.32, r * 5, 0.64);
+        }
+      }
+      ctx.restore();
+    }
+
+    function drawLine(line, progress) {
+      const local = moduleLocal(progress, line.moduleId);
+      const pts = line.points.map((p) => project(transformedPoint(p, line.moduleId, progress)));
+      ctx.save();
+      ctx.globalAlpha = line.alpha * (0.72 + local * 0.28);
+      ctx.strokeStyle = line.color;
+      ctx.lineWidth = line.width;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      pts.forEach((p, i) => {
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      });
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawParticles(now, progress) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const particle of particles) {
+        let p = transformedPoint(particle, particle.moduleId, progress);
+        const drift = particle.moduleId === 0 ? 0.22 : 0.045;
+        p = {
+          x: p.x + Math.sin(now * 0.001 + particle.seed * 13) * drift,
+          y: p.y + Math.cos(now * 0.0012 + particle.seed * 17) * drift * 0.45,
+          z: p.z + Math.cos(now * 0.0009 + particle.seed * 11) * drift
+        };
+        const pr = project(p);
+        if (pr.depth <= 1 || pr.x < -20 || pr.x > view.width + 20 || pr.y < -20 || pr.y > view.height + 20) continue;
+        const alpha = particle.moduleId === 0 ? 0.08 : 0.32;
+        const color = particle.moduleId === 0 ? 'rgba(174, 229, 255,' : 'rgba(255, 202, 92,';
+        const r = clamp(particle.size * pr.scale * 0.024, 0.42, 2.4);
+        ctx.fillStyle = `${color}${alpha})`;
+        ctx.beginPath();
+        ctx.arc(pr.x, pr.y, r, 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function renderScene(now, progress) {
+      const ordered = shapes.slice().sort((a, b) => depthOf(a.points, a.moduleId, progress) - depthOf(b.points, b.moduleId, progress));
+      for (const shape of ordered) drawPolygon(shape, progress);
+      const orderedLines = lines.slice().sort((a, b) => depthOf(a.points, a.moduleId, progress) - depthOf(b.points, b.moduleId, progress));
+      for (const line of orderedLines) drawLine(line, progress);
+    }
+
+    function updateAnnotations(progress, alpha) {
+      const w = view.width;
+      const h = view.height;
+      leaderSvg.setAttribute('width', String(w));
+      leaderSvg.setAttribute('height', String(h));
+      leaderSvg.style.opacity = String(alpha);
+
+      labels.forEach((label) => {
+        const projected = project(transformedPoint(label.p, label.moduleId, progress));
+        const labelW = w < 680 ? 118 : Math.min(238, Math.max(164, Math.round(w * 0.15)));
+        const sidePad = w < 680 ? 8 : 28;
+        const tx = label.side === 'left' ? sidePad : w - labelW - sidePad;
+        const slotCount = 7;
+        const topPad = h < 760 ? 18 : 24;
+        const bottomPad = h < 760 ? 54 : 72;
+        const row = slotCount <= 1 ? 0 : label.slot / (slotCount - 1);
+        const ty = topPad + row * Math.max(1, h - topPad - bottomPad);
+        const endX = label.side === 'left' ? tx + labelW : tx;
+        const endY = ty + 19;
+
+        label.el.style.width = `${labelW}px`;
+        label.el.style.opacity = String(alpha);
+        label.el.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
+        label.line.setAttribute('x1', projected.x.toFixed(1));
+        label.line.setAttribute('y1', projected.y.toFixed(1));
+        label.line.setAttribute('x2', endX.toFixed(1));
+        label.line.setAttribute('y2', endY.toFixed(1));
+        label.dot.setAttribute('cx', projected.x.toFixed(1));
+        label.dot.setAttribute('cy', projected.y.toFixed(1));
+      });
+    }
+
+    function resize() {
+      view.width = window.innerWidth;
+      view.height = window.innerHeight;
+      view.dpr = Math.min(window.devicePixelRatio || 1, DPR_LIMIT);
+      canvas.width = Math.floor(view.width * view.dpr);
+      canvas.height = Math.floor(view.height * view.dpr);
+      canvas.style.width = `${view.width}px`;
+      canvas.style.height = `${view.height}px`;
+      ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    }
+
+    canvas.addEventListener('pointerdown', (event) => {
+      view.dragging = true;
+      view.lastX = event.clientX;
+      view.lastY = event.clientY;
+      canvas.setPointerCapture(event.pointerId);
+    });
+
+    canvas.addEventListener('pointermove', (event) => {
+      if (!view.dragging) return;
+      const dx = event.clientX - view.lastX;
+      const dy = event.clientY - view.lastY;
+      view.lastX = event.clientX;
+      view.lastY = event.clientY;
+      view.yaw += dx * 0.006;
+      view.pitch = clamp(view.pitch + dy * 0.0035, -0.66, 0.18);
+    });
+
+    canvas.addEventListener('pointerup', (event) => {
+      view.dragging = false;
+      canvas.releasePointerCapture(event.pointerId);
+    });
+
+    canvas.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      view.zoom = clamp(view.zoom * (event.deltaY > 0 ? 0.94 : 1.06), 0.76, 1.64);
+    }, { passive: false });
+
+    window.addEventListener('resize', resize, { passive: true });
+    resize();
+
+    const start = performance.now();
+    function animate(now) {
+      const t = (now - start) * 0.001;
+      const state = timeline(t);
+      if (!view.dragging) view.yaw += state.hold ? 0.00045 : 0.0016;
+      drawBackground(now);
+      drawParticles(now, state.progress);
+      renderScene(now, state.progress);
+      drawStructureParticles(now, state.progress);
+      updateAnnotations(state.progress, state.labelAlpha);
+      requestAnimationFrame(animate);
+    }
+
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
